@@ -3,17 +3,17 @@
 const BASE_SPEED = 220, MAX_SPEED = 340, ACCEL = 1.6, STEER = 2.7;
 // on-canvas buttons (canvas pixels); the renderer draws them, the game hit-tests them
 const BTN = {
-  title: { x: 110, y: 123, w: 100, h: 16, label: 'START' },
-  pause: { x: 110, y: 88, w: 100, h: 16, label: 'RESUME' },
-  over:  { x: 100, y: 114, w: 120, h: 16, label: 'RUN AGAIN' },
+  title: { x: 165, y: 188, w: 150, h: 26, label: 'START' },
+  pause: { x: 165, y: 134, w: 150, h: 26, label: 'RESUME' },
+  over:  { x: 150, y: 172, w: 180, h: 26, label: 'RUN AGAIN' },
 };
 // touch controls (canvas pixels): hold left/right to steer, tap jump/slide/pause; each finger is tracked separately
 const TOUCH = [
-  { id: 'left',  x: 4,   y: 142, w: 38, h: 32 },
-  { id: 'right', x: 46,  y: 142, w: 38, h: 32 },
-  { id: 'slide', x: 234, y: 142, w: 38, h: 32 },
-  { id: 'jump',  x: 278, y: 142, w: 38, h: 32 },
-  { id: 'pause', x: 148, y: 3,   w: 24, h: 14 },
+  { id: 'left',  x: 6,   y: 213, w: 58, h: 48 },
+  { id: 'right', x: 70,  y: 213, w: 58, h: 48 },
+  { id: 'slide', x: 352, y: 213, w: 58, h: 48 },
+  { id: 'jump',  x: 416, y: 213, w: 58, h: 48 },
+  { id: 'pause', x: 222, y: 4,   w: 36, h: 22 },
 ];
 const GRAV = 900, JUMP_V = 268, SLIDE_T = 0.55, P_HW = 0.1;
 
@@ -76,9 +76,10 @@ class Game {
   }
 
   fit() {
-    // whole-number scaling keeps pixels even; on screens too small for 2x (phones in portrait) use the exact fit instead
-    const f = Math.min(innerWidth / VW, innerHeight / VH), s = f >= 2 ? Math.floor(f) : f;
-    this.cv.style.width = VW * s + 'px'; this.cv.style.height = VH * s + 'px';
+    // whole DEVICE pixels per canvas pixel keeps every pixel the same size even on high-DPI phones;
+    // if the screen is too small for 1x, fall back to the exact fit
+    const dpr = window.devicePixelRatio || 1, f = Math.min(innerWidth * dpr / VW, innerHeight * dpr / VH), s = f >= 1 ? Math.floor(f) : f;
+    this.cv.style.width = VW * s / dpr + 'px'; this.cv.style.height = VH * s / dpr + 'px';
   }
 
   resetRun() {
@@ -168,7 +169,7 @@ class Game {
     // brief lean of the road toward the chosen branch; the runner's screen position is unaffected
     if (this.kick) {
       this.kick.t += dt;
-      this.sway = this.kick.side * 16 * Math.sin(Math.PI * Math.min(1, this.kick.t / 1.8));
+      this.sway = this.kick.side * 24 * Math.sin(Math.PI * Math.min(1, this.kick.t / 1.8));
       if (this.kick.t >= 1.8) { this.kick = null; this.sway = 0; }
     }
     if (this.banner) this.banner.t -= dt;
@@ -180,12 +181,12 @@ class Game {
     this.bgT += (tt - this.bgT) * Math.min(1, dt * 1.5);
     if (this.bgT <= 0.02 && to !== this.bgTo) this.bgTo = to;
     const here = w.playerBand(p.z + 60, p.x);
-    this.canopy += ((here.to === 'forest' ? here.t : 0) - this.canopy) * Math.min(1, dt * 2);
+    this.canopy += ((here.to === 'jungle' ? here.t : 0) - this.canopy) * Math.min(1, dt * 2);
   }
 
   updateFx(dt) {
     this.shake = Math.max(0, this.shake - dt); this.coinPulse = Math.max(0, this.coinPulse - dt);
-    for (const f of this.fx) { f.x += f.vx * dt; f.y += f.vy * dt; f.vy += (f.gy === undefined ? 260 : f.gy) * dt; f.t -= dt; }
+    for (const f of this.fx) { f.x += (f.vx || 0) * dt; f.y += (f.vy || 0) * dt; f.vy = (f.vy || 0) + (f.gy === undefined ? 390 : f.gy) * dt; f.t -= dt; }
     this.fx = this.fx.filter(f => f.t > 0);
   }
   burst(x, y, cols, n, speed, life) {
@@ -233,9 +234,9 @@ class Game {
     this.dustT -= dt;
     if (this.dustT <= 0 && p.jy === 0) {
       this.dustT = p.slide > 0 ? 0.04 : 0.12;
-      const leaf = this.canopy > 0.3, sxp = 160 + (p.x - this.camX) * LPX * S20;
-      this.fx.push({ x: sxp - 3 + (Math.random() * 6 | 0), y: 157, vx: -10 + (Math.random() * 20 | 0), vy: leaf ? -16 : -10, gy: leaf ? 30 : 4, t: leaf ? 0.5 : 0.3,
-                     col: leaf ? (Math.random() < 0.5 ? C.moss : C.amberD) : C.sandD, s: 1 });
+      const leaf = this.canopy > 0.3, sxp = CX + (p.x - this.camX) * LPX * S20;
+      this.fx.push({ x: sxp - 4 + (Math.random() * 8 | 0), y: FEET_Y - 3, vx: -15 + (Math.random() * 30 | 0), vy: leaf ? -24 : -15, gy: leaf ? 45 : 6, t: leaf ? 0.5 : 0.3,
+                     col: leaf ? (Math.random() < 0.5 ? '#6fd44a' : C.amberD) : '#f8d890', s: 2 });
     }
     w.extend(p.z);
     if (Math.floor(p.z / 100) !== Math.floor(prevZ / 100)) w.prune(p.z);
@@ -247,9 +248,10 @@ class Game {
       if (it.kind === 'coin') {
         if (dx < 0.2 && it.z > prevZ - 9 && it.z < p.z + 9 && p.jy < it.h + 6 && p.jy + top > it.h - 6) {
           it.taken = true; this.coins++; this.coinPulse = 0.2;
-          const cxp = 160 + (it.x - this.camX) * LPX * S20;
-          this.burst(cxp, 159 - it.h, [C.amberL, C.amber, C.bone], 6, 55, 0.35);
-          this.fx.push({ x: cxp - 4, y: 150 - it.h, vx: 0, vy: -34, gy: 0, t: 0.55, col: C.amberL, txt: '+1' });
+          const cxp = CX + (it.x - this.camX) * LPX * S20, cyp = FEET_Y - (it.h + 6) * PXU;
+          this.fx.push({ x: cxp, y: cyp, t: 0.3, life: 0.3, anim: 'burst' });
+          this.burst(cxp, cyp, [C.amberL, C.amber, C.bone], 6, 80, 0.35);
+          this.fx.push({ x: cxp - 6, y: cyp - 18, vx: 0, vy: -50, gy: 0, t: 0.55, col: C.amberL, txt: '+1' });
         }
       } else if (it.kind !== 'prop') {
         const o = OBST[it.kind];
@@ -262,10 +264,11 @@ class Game {
     this.releaseTouch();
     if (this.touch && navigator.vibrate) navigator.vibrate(60);
     this.state = 'over'; this.flash = 0.25; this.shake = 0.35; this.overT = 0; this.jumpBuf = 0;
-    this.burst(160 + (this.p.x - this.camX) * LPX * S20, 140, [C.earth, C.earthD, C.amberL, C.burgL, C.bone], 12, 90, 0.6);
+    this.burst(CX + (this.p.x - this.camX) * LPX * S20, FEET_Y - 30 * PXU, [C.amber, C.amberD, C.amberL, C.burgL, C.bone], 14, 135, 0.6);
     const s = this.score();
     if (s > this.best) { this.best = s; try { localStorage.setItem('wayfarer.best', s); } catch (e) {} }
   }
 }
 
-window.__wf = new Game(document.getElementById('screen'));
+// start once the art has loaded (Assets draws LOADING / an error message on the canvas meanwhile)
+Assets.load(document.getElementById('screen')).then(() => { window.__wf = new Game(document.getElementById('screen')); });

@@ -1,7 +1,9 @@
 // World model: a deterministic chain of track pieces (segments / junctions), road geometry,
 // the branch choice, and item spawning from TRACK data.
-const LPX = 100, K = 90, HY = 64, VW = 320, VH = 180, PLAYER_D = 20, MAXD = 720;
+// Internal resolution 480x270. Gameplay lengths/heights are in 'design units'; art and screen offsets are 1.5x (PXU).
+const LPX = 150, K = 90, HY = 96, VW = 480, VH = 270, PLAYER_D = 20, MAXD = 720, PXU = 1.5;
 const S20 = K / (PLAYER_D + K); // projection scale at the player's depth
+const CX = VW / 2, FEET_Y = Math.round(HY + (VH - HY) * S20); // screen x of the road's vanishing point; runner's feet row
 const APPROACH = 450;           // scenery starts leaning toward the branch biomes this far before the fork
 const PROMPT_DIST = 760;        // LEFT / RIGHT prompt appears this far before the junction line
 const ease = u => u * u * (3 - 2 * u);
