@@ -22,27 +22,28 @@ function tri(r, cx, y0, rows, maxW, fill, lit, edge = C.ink) {
   }
 }
 
-const PCOL = { k: C.ink, h: '#4a3228', s: '#d9a679', t: C.teal, T: C.tealD, b: C.burg, B: C.burgD, a: C.amber, A: C.amberD, c: C.burgL, p: C.earthD };
-// little traveller seen from behind: burgundy cap with an amber band, amber scarf, burgundy pack with a bedroll
+// BERRY (the user's character sheet, docs/berry/), seen from behind: the strawberry helmet (green calyx, red with yellow seeds, a yellow line over its black lower band),
+// the beige hoodie with its pink stripes, its pink back star and its pink hem
+const PCOL = { k: C.ink, r: '#ee2026', R: '#b3121c', y: '#ffd23a', g: '#4ae02c', G: '#27a81e', e: '#f8e2c4', E: '#d9b98f', i: '#ff4f9e', I: '#d92f7c' };
 const PHEAD = [
-  '....kkkkkk....',
-  '...kcccccck...',
-  '..kcccccccck..',
-  '.kkAAAAAAAAkk.',
-  '..khhhhhhhhk..',
-  '...khhhhhhk...',
-  '..kaaaaaaaak..',
+  '....g.gG.g....',
+  '...kggGgggk...',
+  '..krrggrgrrk..',
+  '.krryrrrryrRk.',
+  '.krrrryrrrrRk.',
+  '.kryrrrrryrRk.',
+  '.kyyyyyyyyyyk.',
+  '..kkkkkkkkkk..',
 ];
 const PTORSO = [
-  '..kttbbbbttk..',
-  '..ktbbaabbtk..',
-  '..ktbbaabbtk..',
-  '..kbbbbbbbbk..',
-  '..kbBBBBBBbk..',
-  '..kttttttttk..',
-  '..kppppppppk..',
+  '..keeeeeeeEk..',
+  '..keeeiieeEk..',
+  '..kiiiiiiiik..',
+  '..keeeeeeeEk..',
+  '..kiiiiiiiik..',
+  '..kIIIIIIIIk..',
 ];
-// 4-frame run cycle (contact, pass, contact, pass) with body bob, arm swing and a fluttering scarf tail
+// 4-frame run cycle (contact, pass, contact, pass) with body bob and arm swing
 const RUN = [
   { l: 24, r: 20, la: 10, ra: 8, bob: 1 },
   { l: 23, r: 22, la: 9, ra: 9, bob: 0 },
@@ -52,24 +53,21 @@ const RUN = [
 function playerFrame(kind, f = 0) {
   return mk(14, 24, r => {
     const put = (rows, y0) => rows.forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== '.') r(PCOL[ch], i, y0 + j, 1, 1); }));
-    const leg = (x, top, bottom) => { r(C.earthD, x, top, 3, bottom - 2 - top); r(C.earth, x, top, 1, bottom - 2 - top); r(C.ink, x, bottom - 2, 4, 2); r(C.earthD, x + 1, bottom - 2, 1, 1); };
-    const arm = (x, y, len) => { r(C.teal, x, y, 2, len); r(C.tealD, x === 0 ? 0 : 13, y, 1, len); r('#d9a679', x, y + len, 2, 1); };
-    if (kind === 'slide') { // crouched, leaning back: cap, scarf and pack only
-      put([PHEAD[1], PHEAD[2], PHEAD[3], PHEAD[4], PHEAD[6], ...PTORSO], 12);
-      r(C.amber, 12, 18, 2, 1); r(C.amberD, 13, 19, 1, 1);
+    const leg = (x, top, bottom) => { const h = bottom - 2 - top; r('#16227a', x, top, 3, h); if (h > 2) r('#cdb6ff', x, top + h - 2, 3, 2); r(C.ink, x, bottom - 2, 4, 1); r('#ff4f9e', x, bottom - 1, 4, 1); };   // navy leggings fading to lilac, a black sneaker on a pink sole
+    const arm = (x, y, len) => { r('#f8e2c4', x, y, 2, len); r('#d9b98f', x === 0 ? 0 : 13, y, 1, len); r('#ff8cc4', x, y + 1, 2, 1); r('#ee2026', x, y + len, 2, 1); };   // a striped sleeve, a red mitten
+    if (kind === 'slide') { // crouched low: the helmet and the hoodie only
+      put([PHEAD[1], PHEAD[2], PHEAD[3], PHEAD[5], PHEAD[6], PHEAD[7], ...PTORSO], 12);
       return;
     }
     if (kind === 'jump') {
       put([...PHEAD, ...PTORSO], 0);
       arm(0, 5, 4); arm(12, 5, 4); leg(3, 14, 20); leg(8, 14, 21);
-      r(C.amber, 12, 4, 2, 1); r(C.amberD, 13, 3, 1, 1);
       return;
     }
     const q = RUN[f];
     put([...PHEAD, ...PTORSO], q.bob);
     leg(3, 14 + q.bob, q.l); leg(8, 14 + q.bob, q.r);
     arm(0, q.la + q.bob, 4); arm(12, q.ra + q.bob, 4);
-    r(C.amber, 12, 6 + q.bob, 2, 1); r(C.amberD, 13, 7 + q.bob + (f & 1), 1, 2);
   });
 }
 

@@ -1,0 +1,31 @@
+<!doctype html>
+<!-- BERRY preview: the avatar alone, to compare with docs/berry/*.png. ?view=turn (front / right / back / left), ?view=poses (the blueprint's animation sets, frozen), ?view=live (animated: &anim=run|idle|jump|crouch|title) -->
+<meta charset="utf-8"><title>Berry preview</title>
+<style>html,body{margin:0;background:#15141a;overflow:hidden}canvas{display:block}</style>
+<body><script src="../vendor/three.min.js"></script><script src="../src/track.js"></script><script src="../src3d/kit.js"></script><script src="../src3d/runner_sprite.js"></script><script src="../src3d/berry3d.js"></script>
+<script>
+const q = new URLSearchParams(location.search), view = q.get('view') || 'turn';
+const W = innerWidth, H = innerHeight, renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); renderer.setSize(W, H); renderer.setPixelRatio(+q.get('dpr') || 1); document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#15141a');
+scene.add(new THREE.HemisphereLight(0xffffff, 0x554466, 1.5)); const sun = new THREE.DirectionalLight(0xfff0dd, 1.8); sun.position.set(-2, 4, -3); scene.add(sun); const rim = new THREE.DirectionalLight(0xff88cc, 0.7); rim.position.set(3, 2, 3); scene.add(rim);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x24222c })); scene.add(floor);
+const st = o => Object.assign({ time: 0, runRate: 2.6, airborne: false, vy: 0, sliding: false, lean: 0, state: 'play', beat: 0 }, o);
+const SETS = { turn: [['front', { state: 'title', time: 1 }, Math.PI], ['right', { state: 'title', time: 1 }, Math.PI / 2], ['back', { state: 'title', time: 1 }, 0], ['left', { state: 'title', time: 1 }, -Math.PI / 2]],
+  poses: [['idle', { state: 'title', time: 1 }, 2.6], ['run a', { ph: 1.2 }, 1.2], ['run b', { ph: 4.3 }, 1.2], ['takeoff', { airborne: true, vy: 5, air: 0.03 }, 1.2], ['air', { airborne: true, vy: 3, air: 0.3 }, 1.2], ['fall', { airborne: true, vy: -3, air: 0.5 }, 1.2], ['land', { land: 1 }, 1.2], ['crouch', { sliding: true }, 1.2], ['turn', { lean: 1, ph: 1.2 }, 0.3], ['wave', { state: 'title', time: 3.2 }, 2.6], ['trip', { state: 'over' }, 1.2]] };
+const list = SETS[view] || [['live', {}, +q.get('yaw') || 0.6]], N = list.length, runners = [];
+const hw = Math.max(N * 0.75, 1.2 * W / H), hh = hw * H / W, cam = new THREE.OrthographicCamera(-hw, hw, -0.2 + 2 * hh, -0.2, 0.1, 50);
+cam.position.set(0, 0, 10);
+list.forEach(([name, o, yaw], i) => {
+  const r = new RunnerBerry(); r.group.position.x = (i - (N - 1) / 2) * 1.5; r.group.rotation.y = yaw; scene.add(r.group); r.shadow.position.set(r.group.position.x, 0.01, 0); scene.add(r.shadow); runners.push(r);
+  if (view !== 'live') { const s = st(o); if (o.ph !== undefined) { s.runRate = 0; r.phase = o.ph; } if (o.air) r.airT = o.air; for (let k = 0; k < 120; k++) { if (o.air) r.airT = o.air; if (o.land) { r.landT = 0.05; r.wasAir = false; } r.update(1 / 60, s); } r.label = name; }
+});
+window.__berry = runners;
+let T = 0, last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; T += dt;
+  if (view === 'live') { const a = q.get('anim') || 'run', r = runners[0], u = T % 3; r.group.position.y = a === 'jump' && u < 0.75 ? 4 * 1.5 * u * (0.75 - u) : 0;
+    r.update(dt, st({ time: T, state: a === 'title' || a === 'idle' ? 'title' : 'play', airborne: a === 'jump' && u < 0.75, vy: 0.375 - u, sliding: a === 'crouch' && u < 1.2, lean: a === 'turn' ? Math.sin(T * 2) : 0 })); }
+  renderer.render(scene, cam); window.__frames = (window.__frames || 0) + 1; requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>

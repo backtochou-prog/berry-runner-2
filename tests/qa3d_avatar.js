@@ -1,6 +1,7 @@
-// WAYFARER regression test: the avatar is the user's retouched artwork (RunnerSprite), with the 3D model still available via ?avatar=3d.
-// Checks the default and the switch, that both images load (also from file://), the view shown in each state, size / ground contact / slide
-// height, that the card always faces the camera whatever the renderer's yaw, and that nothing leaks.
+// WAYFARER regression test: the avatar is BERRY (RunnerBerry, src3d/berry3d.js), the rigged 3D body rebuilt from the user's character sheet and animation blueprint (docs/berry/).
+// Checks that it is the default everywhere (the earlier flat artwork and the earlier 3D model are gone), the blueprint's skeleton, its size and ground contact in every animation,
+// the joint ranges, the run (lean, alternating legs, a foot on the ground), the jump's three phases and the landing, the crouch under the gates, the vehicles' stance, the 3D body's
+// heading, the 2D game's sprite, and that nothing leaks.
 //
 // Run:  node tests/qa3d_avatar.js     (needs playwright-core and a Chromium: CHROMIUM=/path/to/chrome, NODE_PATH or PW_CORE as for the other tests)
 const http = require('http'), fs = require('fs'), path = require('path');
@@ -17,59 +18,75 @@ const res = []; const T = (n, ok, i = '') => { res.push(ok); console.log((ok ? '
   const b = await chromium.launch({ executablePath: process.env.CHROMIUM || require('./_chromium')(), args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const open = async url => { const pg = await (await b.newContext({ viewport: { width: 480, height: 270 } })).newPage(); pg.errs = []; pg.on('pageerror', e => pg.errs.push(e.message)); pg.on('console', m => m.type() === 'error' && pg.errs.push(m.text())); await pg.addInitScript(() => { window.__keepOver = true; }); await pg.goto(url, { timeout: 90000 }); await pg.waitForFunction(() => window.__wf, null, { timeout: 90000 }); await pg.waitForTimeout(700); return pg; };
 
-  // ---------------------------------------------------------------- 1. default avatar, images loaded, view per state
+  // ---------------------------------------------------------------- 1. Berry is the avatar; its skeleton; its poses
   const pg = await open(process.env.TEST_URL || 'http://localhost:' + PORT + '/');
-  const A = await pg.evaluate(async () => {
+  const A = await pg.evaluate(() => {
     const g = __wf, r = g.r, rn = r.runner, out = {};
-    out.isSprite = rn instanceof RunnerSprite; out.has3dClass = typeof Runner3D === 'function';
-    out.assets = Object.fromEntries(['back', 'side'].map(k => [k, { w: AVATAR_ASSETS[k].w, h: AVATAR_ASSETS[k].h, mh: +AVATAR_ASSETS[k].mh.toFixed(2) }]));
-    for (let i = 0; i < 50 && !(rn.cards.back.material.visible && rn.cards.side.material.visible); i++) await new Promise(r => setTimeout(r, 100));
-    out.loaded = ['back', 'side'].map(k => { const m = rn.cards[k].material; return m.map.image.complete && m.map.image.naturalWidth === AVATAR_ASSETS[k].w && m.map.image.naturalHeight === AVATAR_ASSETS[k].h && m.visible; });
-    const st = o => Object.assign({ time: 3, runRate: 3, airborne: false, vy: 0, sliding: false, lean: 0, state: 'play' }, o);
-    const box = () => { rn.group.updateMatrixWorld(true); const bb = new THREE.Box3(); (function add(o) { if (!o.visible) return; if (o.isMesh || o.isSprite) bb.expandByObject(o, false); else for (const ch of o.children) add(ch); })(rn.group);      /* (only what is shown: the vehicles hidden in the group, the e-bike 1.3 m tall, do not count) */ return { top: +bb.max.y.toFixed(2), bottom: +bb.min.y.toFixed(2), half: +Math.max(-bb.min.x, bb.max.x).toFixed(2) }; };
-    const pose = (name, o, yaw) => { rn.group.position.set(0, 0, 0); rn.group.rotation.y = yaw || 0; for (let i = 0; i < 90; i++) rn.update(1 / 60, st(o)); out[name] = box(); out[name].view = rn.cards.back.visible ? 'back' : rn.cards.side.visible ? 'side' : 'none'; };
-    pose('stand', {}); pose('jump', { airborne: true, vy: 3 }); pose('slide', { sliding: true }); pose('over', { state: 'over' }); pose('title', { state: 'title', time: 3.1 });
-    // the card always faces the camera (world normal +z) whatever yaw the renderer gives the group: heading on a curve, the menu's half turn
-    out.facing = [0, 0.3, -0.4, Math.PI].map(yaw => { rn.group.rotation.y = yaw; for (let i = 0; i < 5; i++) rn.update(1 / 60, st({})); rn.group.updateMatrixWorld(true); const n = new THREE.Vector3(0, 0, 1).transformDirection(rn.cards.back.matrixWorld); return +n.z.toFixed(3); });
-    // the renderer passes the direction of the (orbiting) menu camera as faceYaw: the card turns to face it exactly
-    out.faceYaw = [0.5, -0.8].map(fy => { rn.group.rotation.y = Math.PI; for (let i = 0; i < 5; i++) rn.update(1 / 60, st({ state: 'title', time: 3.1, faceYaw: fy })); rn.group.updateMatrixWorld(true); const card = rn.cards.back.visible ? rn.cards.back : rn.cards.side, n = new THREE.Vector3(0, 0, 1).transformDirection(card.matrixWorld); return +(n.x * Math.sin(fy) + n.z * Math.cos(fy)).toFixed(3); });
-    rn.group.rotation.y = 0; rn.update(1 / 60, st({ state: 'pause', time: 9 })); out.pauseHolds = true;
+    out.cls = rn.constructor.name; out.base = rn instanceof RunnerSprite; out.old = [typeof Runner3D, typeof AVATAR_ASSETS]; out.tris = rn.tris; out.seeds = rn.seeds; out.art = typeof BERRY_ASSETS !== 'undefined' && /^data:image/.test(BERRY_ASSETS.front);
+    out.bones = BERRY_RIG.BONES.filter(n => !rn.bones[n]); const par = n => rn.bones[n].parent.name;
+    out.chain = [par('Hips'), par('Spine_01'), par('Spine_02'), par('Spine_03'), par('Neck'), par('Head'), par('Arm_L'), par('Forearm_L'), par('Hand_L'), par('Leg_R'), par('Calf_R'), par('Foot_R'), par('Shoulder_R')].join('>');
+    const st = o => Object.assign({ time: 3, runRate: 2.6, airborne: false, vy: 0, sliding: false, lean: 0, state: 'play', beat: 0 }, o);
+    const box = o => { rn.group.updateMatrixWorld(true); const bb = new THREE.Box3().setFromObject(o || rn.pivot); return { top: +bb.max.y.toFixed(2), bottom: +bb.min.y.toFixed(2), half: +Math.max(-bb.min.x, bb.max.x).toFixed(2) }; };
+    const feet = () => { rn.group.updateMatrixWorld(true); return Math.min(...rn.foot.map(f => new THREE.Box3().setFromObject(f).min.y)); };
+    const L = BERRY_RIG.LIMITS, lim = { ok: true, worst: '' }, check = () => { const v = rn.limited, e = 1e-6, bad = (v.hip.some(x => Math.abs(x) > L.hip + e) && 'hip') || (v.knee.some(x => x < -e || x > L.knee[1] + e) && 'knee') || (v.ankle.some(x => Math.abs(x) > L.ankle + e) && 'ankle') || (v.elbow.some(x => x < -e || x > L.elbow[1] + e) && 'elbow') || (v.shoulder.some(x => Math.abs(x) > L.shoulder + e) && 'shoulder') || (Math.abs(v.head[0]) > L.headPitch + 0.03 && 'headPitch') || (Math.abs(v.head[1]) > L.headYaw + e && 'headYaw') || (Math.abs(v.head[2]) > L.headRoll + e && 'headRoll'); if (bad) { lim.ok = false; lim.worst = bad; } };
+    const run = (n, o) => { for (let i = 0; i < n; i++) { rn.update(1 / 60, st(Object.assign({}, o, o && o.time0 !== undefined ? { time: o.time0 + i / 60 } : {}))); check(); } };
+    const pose = (name, o, n = 90) => { rn.group.position.set(0, 0, 0); rn.group.rotation.y = 0; run(n, o); out[name] = Object.assign(box(), { anim: rn.anim }); };
+    rn.ride = 0; pose('title', { state: 'title', time: 1 }); out.title.feet = +feet().toFixed(3);
+    // RUN: sampled over two strides
+    rn.group.position.set(0, 0, 0); run(60, {}); const R = { lean: [], feet: [], hipL: [], hipR: [], top: [], hipY: [] }, up = new THREE.Vector3();
+    for (let i = 0; i < 60; i++) { run(1, {}); rn.group.updateMatrixWorld(true); up.set(0, 1, 0).transformDirection(rn.bones.Spine_03.matrixWorld); R.lean.push(Math.atan2(-up.z, up.y)); R.feet.push(feet()); R.hipL.push(rn.limited.hip[0]); R.hipR.push(rn.limited.hip[1]); R.top.push(box().top); R.hipY.push(rn.hipY); }
+    const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
+    out.run = { anim: rn.anim, lean: +(avg(R.lean) * 180 / Math.PI).toFixed(1), feetMin: +Math.min(...R.feet).toFixed(3), feetMax: +Math.max(...R.feet).toFixed(3), swing: +(Math.max(...R.hipL) - Math.min(...R.hipL)).toFixed(2), opposed: +avg(R.hipL.map((v, i) => v * R.hipR[i])).toFixed(3), bounce: +(Math.max(...R.hipY) - Math.min(...R.hipY)).toFixed(3), top: +Math.max(...R.top).toFixed(2) };
+    // JUMP: takeoff for 4 frames, the tuck while rising, the reach while falling; LAND for 6 frames after the touchdown, then the run again
+    const J = []; run(2, { airborne: true, vy: 5 }); J.push(rn.anim); run(4, { airborne: true, vy: 5 }); J.push(rn.anim); run(20, { airborne: true, vy: 3 }); out.air = Object.assign(box(), { feet: +feet().toFixed(2) }); run(10, { airborne: true, vy: -3 }); J.push(rn.anim);
+    run(1, {}); J.push(rn.anim); let landFrames = 1; while (landFrames < 30) { run(1, {}); if (rn.anim !== 'land') break; landFrames++; } J.push(rn.anim); out.jump = { seq: J.join('>'), landFrames };
+    // CROUCH (the game's slide): down within 8 frames, under the 1.05 m gates, feet on the ground; up again
+    run(8, { sliding: true }); out.crouch8 = box().top; pose('crouch', { sliding: true }, 40); out.crouch.feet = +feet().toFixed(3); out.crouch.hip = +rn.hipY.toFixed(2); run(40, {}); out.up = box().top;
+    // TURN: the body rolls and the head looks into the turn (to +x for lean > 0)
+    run(40, { lean: 1 }); out.turn = { roll: +rn.bones.Hips.rotation.z.toFixed(2), head: +rn.bones.Head.rotation.y.toFixed(2) }; run(30, {});
+    // the vehicles: a stance, not a run
+    run(120, { scooter: true, vehicle: 'scooter' }); out.scooter = { anim: rn.anim, ride: +rn.ride.toFixed(2), vis: rn.scooter.visible, armsFwd: rn.limited.shoulder[0] > 0.8 && rn.limited.shoulder[1] > 0.8 }; run(60, { scooter: true, vehicle: 'board' }); out.board = { anim: rn.anim, side: +rn.pose.side.toFixed(2) }; run(120, {}); out.off = { anim: rn.anim, ride: +rn.ride.toFixed(2) };
+    pose('over', { state: 'over' }); pose('wave', { state: 'title', time0: 2.2 }, 60); pose('dance', { state: 'title', time0: 5.6 }, 60);
+    // a 3D body keeps the heading of its group: its visor (the Head's -z) points where the group points, whatever faceYaw says
+    out.heading = [0, 0.4, -0.5, Math.PI].map(yaw => { rn.group.rotation.y = yaw; run(40, { faceYaw: 0.7 }); rn.group.updateMatrixWorld(true); const f = new THREE.Vector3(0, 0, -1).transformDirection(rn.bones.Hips.matrixWorld); return +(f.x * -Math.sin(yaw) + f.z * -Math.cos(yaw)).toFixed(2); });
+    rn.group.rotation.y = 0; const before = JSON.stringify(rn.pose); rn.update(1 / 60, st({ state: 'pause', time: 9 })); out.pauseHolds = before === JSON.stringify(rn.pose);
+    out.limits = lim; out.pivotVisible = rn.pivot.visible;
     return out;
   });
-  T('default avatar is the retouched artwork (RunnerSprite); the 3D model class is still there', A.isSprite && A.has3dClass, JSON.stringify({ isSprite: A.isSprite, has3d: A.has3dClass }));
-  T('both images load at their embedded size and become visible', A.loaded.every(Boolean) && A.assets.back.h === 800 && A.assets.side.h === 800 && Math.abs(A.assets.back.mh - 1.9) < 0.02 && Math.abs(A.assets.side.mh - 1.9) < 0.05, JSON.stringify({ loaded: A.loaded, assets: A.assets }));
-  T('the view follows the state: back while playing / jumping / sliding / tripping and, by default, in the menu', A.stand.view === 'back' && A.jump.view === 'back' && A.slide.view === 'back' && A.over.view === 'back' && A.title.view === 'back', JSON.stringify({ stand: A.stand.view, jump: A.jump.view, slide: A.slide.view, over: A.over.view, title: A.title.view }));
-  T('size and ground: standing ~1.9 m (+ run bounce), feet on the road, jumping clear of it, sliding under 0.9 m, tripped lower still', A.stand.top >= 1.85 && A.stand.top <= 2.05 && A.stand.bottom >= -0.06 && A.stand.bottom <= 0.1 && A.jump.bottom >= -0.01 && A.slide.top <= 0.9 && A.slide.bottom >= -0.06 && A.over.top < A.slide.top + 0.2 && A.stand.half >= 0.43, JSON.stringify({ stand: A.stand, jump: A.jump, slide: A.slide, over: A.over }));
-  T('the card always faces the camera whatever the group\'s yaw (heading on curves, the menu turn), and squarely faces the menu camera\'s direction (faceYaw)', A.facing.every(z => z > 0.999) && A.faceYaw.every(v => v > 0.999), JSON.stringify({ facing: A.facing, faceYaw: A.faceYaw }));
+  T('the avatar is BERRY: RunnerBerry (a RunnerSprite, so it rides the vehicles), ' + A.tris + ' triangles, ' + A.seeds + ' seeds; the earlier flat artwork and the earlier 3D model are gone; its picture for the panels is embedded', A.cls === 'RunnerBerry' && A.base && A.old.every(t => t === 'undefined') && A.tris > 6000 && A.tris < 30000 && A.seeds >= 30 && A.art, JSON.stringify({ cls: A.cls, old: A.old, tris: A.tris }));
+  T('the blueprint\'s skeleton: every bone, in its hierarchy (Root > Hips > Spine_01 > Spine_02 > Spine_03 > Neck > Head; Shoulder > Arm > Forearm > Hand; Leg > Calf > Foot)', A.bones.length === 0 && A.chain === 'Root>Hips>Spine_01>Spine_02>Spine_03>Neck>Shoulder_L>Arm_L>Forearm_L>Hips>Leg_R>Calf_R>Spine_03', JSON.stringify({ missing: A.bones, chain: A.chain }));
+  T('standing (the menu\'s idle): about 1.9 m to the top of the leaves, feet on the ground, about 1 m wide with the arms', A.title.anim === 'idle' && A.title.top >= 1.85 && A.title.top <= 2.02 && Math.abs(A.title.feet) <= 0.02 && A.title.half >= 0.4 && A.title.half <= 0.65, JSON.stringify(A.title));
+  T('RUN: a forward lean of 15-20 degrees (' + A.run.lean + '), the legs swing against each other, the lower foot stays on the ground, the stride makes the bounce', A.run.anim === 'run' && A.run.lean >= 13 && A.run.lean <= 21 && A.run.swing > 0.8 && A.run.opposed < -0.05 && A.run.feetMin > -0.035 && A.run.feetMax < 0.05 && A.run.bounce > 0.02 && A.run.bounce < 0.16, JSON.stringify(A.run));
+  T('JUMP in three phases (takeoff 4 frames > air > fall), then LAND for about 6 frames, then the run again', A.jump.seq === 'takeoff>air>fall>land>run' && A.jump.landFrames >= 5 && A.jump.landFrames <= 8 && A.air.top > 1.5, JSON.stringify({ jump: A.jump, air: A.air }));
+  T('CROUCH: low within 8 frames, under the 1.05 m gates, the centre of mass about half as high, feet on the ground; up again after', A.crouch.anim === 'crouch' && A.crouch8 <= 1.3 && A.crouch.top <= 1.05 && A.crouch.hip <= 0.62 * 0.62 && Math.abs(A.crouch.feet) <= 0.04 && A.up >= 1.8, JSON.stringify({ crouch8: A.crouch8, crouch: A.crouch, up: A.up }));
+  T('TURN: the body rolls into the turn and the head looks into it', A.turn.roll < -0.08 && A.turn.head < -0.2, JSON.stringify(A.turn));
+  T('on the scooter it stands with its hands forward on the bar, on the board it stands sideways; off again, it runs', A.scooter.anim === 'ride' && A.scooter.ride > 0.9 && A.scooter.vis && A.scooter.armsFwd && A.board.anim === 'ride' && A.board.side > 0.8 && A.off.anim === 'run' && A.off.ride < 0.1, JSON.stringify({ scooter: A.scooter, board: A.board, off: A.off }));
+  T('a crash tips it forward onto the ground (lower than 1.5 m); the menu\'s wave and dance keep it standing', A.over.anim === 'trip' && A.over.top < 1.5 && A.over.bottom > -0.15 && A.wave.anim === 'wave' && A.wave.top > 1.85 && A.dance.anim === 'dance' && A.dance.bottom > -0.04, JSON.stringify({ over: A.over, wave: A.wave, dance: A.dance }));
+  T('every joint stayed inside the blueprint\'s ranges in all of the above (head, shoulder, elbow, hip, knee, ankle)', A.limits.ok, JSON.stringify(A.limits));
+  T('a 3D body: it keeps the heading of its group whatever the camera\'s direction; a pause holds the pose', A.heading.every(v => v > 0.98) && A.pauseHolds, JSON.stringify({ heading: A.heading, pause: A.pauseHolds }));
 
-  // ---------------------------------------------------------------- 2. no leaks over a long play-through; textures stay at 2
-  const L = await pg.evaluate(() => {
+  // ---------------------------------------------------------------- 2. a real run: no errors, nothing leaks
+  const Lk = await pg.evaluate(() => {
     const g = __wf, r = g.r; g.start(); g.world.items = [];
     const hazardFree = () => { g.world.items = g.world.items.filter(i => i.kind === 'coin' || i.kind === 'prop'); };
-    for (let f = 0; f < 30; f++) { g.advance(1 / 60); r.draw(g); }                       // real frames first, so the textures are uploaded
-    const rn = r.runner, kids0 = r.scene.children.length, own0 = rn.pivot.children.length, geoIds0 = ['back', 'side'].map(k => rn.cards[k].geometry.uuid).join();
-    const play = n => { for (let f = 0; f < n && g.state === 'play'; f++) { if (f % 20 === 0) hazardFree(); g.advance(1 / 60); if (f % 15 === 0) r.draw(g); if (f === 600) g.keys.left = true; if (f === 700) { g.keys.left = false; g.keys.right = true; } if (f === 800) g.keys.right = false; } r.draw(g); };
-    play(1800); const tex1 = r.renderer.info.memory.textures;                              // textures are uploaded when first drawn: the tree atlas, the avatar's back view, the sun glow and the sign atlas of the tram street (warmed up at start), and the neon atlas once the district comes into view
-    play(1800); const tex2 = r.renderer.info.memory.textures;      /* (a third half-minute: after the warm-up NOTHING may be uploaded any more) */ play(1800); const tex3 = r.renderer.info.memory.textures;                              // a second 30 s: nothing new may appear
-    return { state: g.state, tex: [tex1, tex2, tex3], kids: [kids0, r.scene.children.length], own: [own0, rn.pivot.children.length], sameCards: geoIds0 === ['back', 'side'].map(k => rn.cards[k].geometry.uuid).join() };   // (geometry counts also grow as new scenery is first drawn: that is the GPU upload of props, not the avatar)
+    for (let f = 0; f < 30; f++) { g.advance(1 / 60); r.draw(g); }
+    const rn = r.runner, kids0 = r.scene.children.length, count = () => { let n = 0; rn.group.traverse(() => n++); return n; }, own0 = count(), anims = new Set();
+    for (let f = 0; f < 1500 && g.state === 'play'; f++) { if (f % 20 === 0) hazardFree(); if (f === 300) g.jump(); if (f === 500) g.slideKey(); if (f === 700) g.keys.left = true; if (f === 760) g.keys.left = false; g.advance(1 / 60); const near = (f >= 298 && f < 380) || (f >= 498 && f < 520); if (near || f % 15 === 0) { r.draw(g); anims.add(rn.anim); } }      // (the body is posed when a frame is drawn: every frame round the jump and the slide)
+    r.draw(g); return { state: g.state, kids: [kids0, r.scene.children.length], own: [own0, count()], anims: [...anims].sort().join(), inScene: rn.group.parent === r.scene };
   });
-  T('no leaks: the uploaded textures stop growing (<= 54, 49-51 today: trees, the two avatar views, three neon atlases, the tram signs, the sun glow, the blossom tree, the board rear, the board trail gradient, the neon shop windows, the fourth neon set, the mixed flowers, the streak gradient of the dash, the Utrecht atlas, its brick paving and its water, the foam of the surfboard, the coast atlas, its neon name board, the dolphin sign of Club Delphi, the Stargate picture, the sunburst of the parasols, the light of the surface of the sea seen from the aquarium tunnel, the red ring, the spiral and the swirls of the vortex, the photos of the island, the swirls of its parasols and the FRUITERIA board, the picture street of the neon quarter, its end wall the paper city of its tunnel, the ART CITY atlas and its gantry sign, the NEON AVENUE atlas and the ramp picture of its bridge, the handlebar LCDs of the scooter and the e-bike and the e-bike picture: each uploaded when first drawn, so one of them may come in the second half), the 2 cards and the scene children stay constant over 60 s of play', L.state === 'play' && L.tex[0] >= 1 && L.tex[0] <= 54 && L.tex[1] <= 54 && L.tex[1] - L.tex[0] <= 1 && L.tex[2] <= L.tex[1] && L.kids[0] === L.kids[1] && L.own[0] === 2 && L.own[1] === 2 && L.sameCards, JSON.stringify(L));
-  T('no JS errors in the default avatar session', pg.errs.length === 0, pg.errs.slice(0, 2).join('|'));
+  T('25 s of play (a jump, a slide, a turn): the run, the takeoff, the air, the fall, the landing and the crouch are all played; the scene and the body keep their size', Lk.state === 'play' && Lk.inScene && Lk.kids[0] === Lk.kids[1] && Lk.own[0] === Lk.own[1] && ['run', 'takeoff', 'air', 'fall', 'land', 'crouch'].every(a => Lk.anims.split(',').includes(a)), JSON.stringify(Lk));
+  T('no JS errors in the session', pg.errs.length === 0, pg.errs.slice(0, 2).join('|'));
   await pg.context().close();                                   // close it: a page left running keeps drawing and slows every page opened after it (software GL)
 
-  // ---------------------------------------------------------------- 3. ?avatar=3d selects the 3D model; file:// works (the images are embedded)
+  // ---------------------------------------------------------------- 3. file:// and the 2D game
   if (!process.env.TEST_URL) {
-    const p3 = await open('http://localhost:' + PORT + '/?avatar=3d');
-    const M = await p3.evaluate(() => ({ is3d: __wf.r.runner instanceof Runner3D, kids: __wf.r.runner.group.children.length }));
-    T('?avatar=3d selects the 3D model', M.is3d && M.kids > 0 && p3.errs.length === 0, JSON.stringify({ is3d: M.is3d, errs: p3.errs.length }));
-    await p3.context().close();
-    const ps = await open('http://localhost:' + PORT + '/?menu=side');
-    const V = await ps.evaluate(() => { const rn = __wf.r.runner; rn.group.rotation.y = Math.PI; for (let i = 0; i < 5; i++) rn.update(1 / 60, { state: 'title', time: 3.1, runRate: 3, airborne: false, vy: 0, sliding: false, lean: 0 }); return { menuView: rn.menuView, side: rn.cards.side.visible, back: rn.cards.back.visible }; });
-    T('?menu=side shows the side view in the menu', V.menuView === 'side' && V.side && !V.back && ps.errs.length === 0, JSON.stringify(V));
-    await ps.context().close();
     const pf = await open('file://' + path.join(ROOT, 'index.html'));
-    const F = await pf.evaluate(async () => { const rn = __wf.r.runner; for (let i = 0; i < 50 && !rn.cards.back.material.visible; i++) await new Promise(r => setTimeout(r, 100)); return { sprite: rn instanceof RunnerSprite, visible: rn.cards.back.material.visible && rn.cards.side.material.visible }; });
-    T('works from file:// (images embedded as data URIs, no CORS problem)', F.sprite && F.visible && pf.errs.length === 0, JSON.stringify({ ...F, errs: pf.errs.slice(0, 1) }));
+    const F = await pf.evaluate(() => ({ cls: __wf.r.runner.constructor.name }));
+    T('works from file:// (nothing to fetch)', F.cls === 'RunnerBerry' && pf.errs.length === 0, JSON.stringify({ ...F, errs: pf.errs.slice(0, 1) }));
+    await pf.context().close();
+    const p2 = await open('http://localhost:' + PORT + '/2d.html');
+    const S = await p2.evaluate(() => { const px = (spr, x, y) => [...spr.getContext('2d').getImageData(x, y, 1, 1).data].slice(0, 3).join(); return { red: px(SPR.run1, 4, 4), green: px(SPR.run1, 5, 1), beige: px(SPR.run1, 4, 8), slide: SPR.slide.width + 'x' + SPR.slide.height }; });
+    T('the 2D game\'s sprite is Berry too (a green calyx on a red helmet, a beige hoodie)', S.red === '238,32,38' && S.green === '74,224,44' && S.beige === '248,226,196' && p2.errs.length === 0, JSON.stringify(S));
   }
   console.log('\n' + res.filter(Boolean).length + '/' + res.length + ' passed');
   await b.close(); srv.close(); process.exit(res.every(Boolean) ? 0 : 1);

@@ -134,7 +134,7 @@ class Renderer3D {
     this.items = new Items3D(this.scene);
     this.fx = new Fx3D(this.scene);
     this.saucers = typeof Saucer3D !== 'undefined' ? new Saucer3D(this.scene) : null;                  // the flying saucers of the coastal town (one per landing pad in view)
-    this.characters = {}; this.character = Renderer3D.savedCharacter(); this.runner = this.makeRunner(this.character);   // the playable characters: the strawberry (the user's retouched artwork by default; ?avatar=3d selects its 3D model) and Zagla (a 3D body)
+    this.characters = {}; this.character = Renderer3D.savedCharacter(); this.runner = this.makeRunner(this.character);   // the playable characters: BERRY (RunnerBerry: the rigged 3D body of the user's character sheet) and Zagla (a 3D body)
     this.scene.add(this.runner.group); this.scene.add(this.runner.shadow);
 
     this.supportsAbsorb = true;                                                     // Game shows a crate (the vortex) absorbing the runner instead of a crash only with a front end that sets this
@@ -166,7 +166,7 @@ class Renderer3D {
     return 'strawberry';
   }
   makeRunner(id) {
-    if (!this.characters[id]) this.characters[id] = id === 'zagla' && typeof RunnerZagla !== 'undefined' ? new RunnerZagla() : /[?&]avatar=(3d|model)\b/.test(location.search) ? new Runner3D() : new RunnerSprite();
+    if (!this.characters[id]) this.characters[id] = id === 'zagla' && typeof RunnerZagla !== 'undefined' ? new RunnerZagla() : new RunnerBerry();
     return this.characters[id];
   }
   setCharacter(id) {
@@ -544,7 +544,7 @@ class Renderer3D {
     this.runner.group.rotation.y = Math.PI * mm + this.heading * (1 - mm) + cornerA + (trk && trk.kind === 'spin' ? Math.PI * 2 * ease(trkA) : 0);
     this.runner.update(dt, { beat: pulse, faceYaw: Math.atan2(this.cam.x - relX, this.cam.z) + cornerA, time: g.time, runRate: 2.3 + p.speed / 340 * 1.1, airborne: p.jy > 0, vy: p.vy, sliding: p.slide > 0,
                              absorb: absK, absorbSpin: absSpin, lean: Math.max(-1, Math.min(1, p.vx / STEER)), state: g.state, scooter: this.riding(g) || !!g.surf, vehicle: g.surf ? 'surf' : g.vehicle || 'scooter', kmh: Math.round(p.speed * 0.36 * (g.pk ? g.pk.speedMul : 1)), flip: trk && trk.kind === 'flip' ? Math.PI * 2 * ease(trkA) : 0, pop: g.olliePop ? Math.sin(Math.min(1, g.olliePop.t / 0.45) * Math.PI) : 0 });      // (on the e-bike the flip is a tailwhip: RunnerSprite turns its frame about the vertical)
-    if (absK && !(this.runner instanceof RunnerSprite)) this.runner.group.rotation.y += absSpin;      // (the 3D-model avatar has no card to turn: its group turns)
+    
 
     // ---- camera: chase (behind and above, centred on the 2D camera) blended with the menu showcase orbit; looks down the active route
     const orbit = Math.sin(g.time * 0.35) * 0.5;                  // menu camera drifts around the character

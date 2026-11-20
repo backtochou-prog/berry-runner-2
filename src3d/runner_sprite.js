@@ -1,11 +1,7 @@
-// RunnerSprite: the player avatar as the user's own retouched artwork (AVATAR_ASSETS in avatar_assets.js), shown as flat cards.
-// It has the same interface as Runner3D (group, shadow, update(dt, state), cur), so the renderer and the tests treat both alike:
-//   - the chase camera looks at the runner from behind, so gameplay shows the retouched BACK view;
-//   - the menu shows the same BACK view (or the SIDE view with ?menu=side) with an idle / wave / spin / dance / run-in-place showcase, like the 3D model's;
-//   - there is no skeleton, so the motion is done to the whole card: run bounce and squash-and-stretch, a steering lean, a stretch in the jump,
-//     ducking (squashed) for the slide, tipping forward for a crash.
-// Size: 1.9 m tall (hair top to soles), feet on the road (the card pivots at its bottom centre). The group is yawed by the renderer like the 3D
-// model (heading, menu turn); the card cancels that yaw so it always faces the camera. `?avatar=3d` in the URL selects the 3D model instead.
+// RunnerSprite: the base of the playable runners (RunnerBerry in berry3d.js, RunnerZagla in zagla3d.js). It carries what they share: the group the renderer places and turns, a pivot at the
+// soles (bottom centre) where the body hangs, the contact shadow, the eased whole-body state (this.cur: bounce, tilt, squash), the run phase, and THE VEHICLES (scooter, e-bike, board,
+// surfboard: small low-poly models, children of the group, so they turn with the heading and rise in the jump). The bodies add their own pieces and motion on top.
+// The interface the renderer and the tests use: group, shadow, pivot, update(dt, state), cur.
 // SCOOTER: in Saint-Gilles (or everywhere with ?scooter=1, nowhere with ?scooter=0) the runner rides a lime kick scooter (a small low-poly model built from Kit parts, a child of the group, so it
 // turns with the heading and rises in the jump): the card stands on the deck, the run bounce and sway give way to a steady glide with the steering lean, the wheels spin, the nose lifts in the jump.
 // States: 'play' run / jump / slide, 'over' trip, 'pause' hold, 'title' a looping showcase for the main menu.
@@ -18,16 +14,7 @@ class RunnerSprite {
     this.menuView = (location.search.match(/[?&]menu=(side|back)\b/) || [])[1] || 'back';   // which artwork the menu shows: the back view (default, wider and matching the game) or the side view (?menu=side)
     this.group = new THREE.Group();
     this.pivot = new THREE.Group(); this.group.add(this.pivot);                   // bottom-centre pivot: tilts, squashes and spins happen here
-    this.cards = {};
-    for (const name of ['back', 'side']) {
-      const A = AVATAR_ASSETS[name], img = new Image(), tex = new THREE.Texture(img);
-      tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4; tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
-      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.02, side: THREE.DoubleSide, fog: false });   // unlit: the artwork's own colours
-      mat.visible = false; img.onload = () => { tex.needsUpdate = true; mat.visible = true; }; img.src = A.src;
-      const geo = new THREE.PlaneGeometry(A.mw, A.mh); geo.translate(0, A.mh / 2, 0);                                       // origin at the soles
-      const card = new THREE.Mesh(geo, mat); card.visible = false; this.pivot.add(card); this.cards[name] = card;
-    }
-    this.cards.back.visible = true;
+    this.cards = {};                                                              // (the flat artwork cards of the first avatar are gone: the bodies, RunnerBerry and RunnerZagla, hang their own pieces on the pivot)
     // the soft contact shadow lives in the scene (the renderer places it under the runner and shrinks it with jump height)
     this.shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }));
     this.shadow.renderOrder = 1; this.shadow.scale.set(0.5, 1, 0.42);
@@ -74,7 +61,7 @@ class RunnerSprite {
     if (s.beat > 0 && s.state !== 'over') { const m = s.state === 'title' ? 1 : 0.4; t.y += 0.1 * m * s.beat; t.sy += 0.05 * m * s.beat; t.sx -= 0.03 * m * s.beat; }   // bounces on the beat of the music (more in the menu)
     const k = 1 - Math.exp(-(s.sliding ? 60 : 15) * dt);       // the slide pose is near-instant: the game counts a slide from the first frame
     for (const key in c) c[key] += (t[key] - c[key]) * k;
-    if (view !== this.view) { this.cards.back.visible = view === 'back'; this.cards.side.visible = view === 'side'; this.view = view; }
+    this.view = view;
     const bike = this.vehicle === 'bike', surf = this.vehicle === 'surf', mag = !board && !surf && !bike, hover = bike ? 0 : board ? 0.02 * Math.sin(T * 3) : surf ? 0.03 * Math.sin(T * 2.4) + 0.02 * (s.beat || 0) : 0.045 + 0.018 * Math.sin(T * 2.3) + 0.008 * Math.sin(T * 5.1);      // (the magnetic scooter floats: never still)      // the board floats, with a gentle bob (the surfboard rides the swell)
     this.pivot.position.y = c.y + (mag ? 0.165 : bike ? RunnerSprite.BIKE_DECK : surf ? RunnerSprite.SURF_DECK : board ? RunnerSprite.BOARD_DECK : RunnerSprite.DECK) * Math.min(1, R * 1.5) + hover * R;   // the feet stand on the deck
     const sc = this.scooter, bd = this.board, sf = this.surfB, bk = this.bike, v = bike ? bk : surf ? sf : board ? bd : sc; for (const o of [sc, bd, sf, bk]) if (o && o !== v) o.visible = false;

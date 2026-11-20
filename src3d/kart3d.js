@@ -666,9 +666,9 @@ class Kart3D {
     const col = ok ? '#7dffb0' : deny ? '#ff4d6a' : warn && blink ? '#ffb030' : warn ? '#ff7a40' : '#35f0ff';
     c.clearRect(0, 0, W, H); c.fillStyle = 'rgba(4,12,26,0.88)'; c.fillRect(0, 0, W, H); c.strokeStyle = col; c.lineWidth = 8; c.strokeRect(10, 10, W - 20, H - 20);
     c.fillStyle = col; c.textAlign = 'center'; c.font = 'bold 34px monospace';
-    const pic = (id) => { if (I.faceId !== id) { I.faceId = id; I.face = null; const src = id === 'zagla' ? (typeof ZAGLA_ASSETS !== 'undefined' ? ZAGLA_ASSETS.front : null) : (typeof AVATAR_ASSETS !== 'undefined' ? AVATAR_ASSETS.side.src : null); if (src) { const im = new Image(); im.onload = () => { I.face = im; I.key = ''; }; im.src = src; } } return I.face; };
+    const pic = (id) => { if (I.faceId !== id) { I.faceId = id; I.face = null; const src = id === 'zagla' ? (typeof ZAGLA_ASSETS !== 'undefined' ? ZAGLA_ASSETS.front : null) : (typeof BERRY_ASSETS !== 'undefined' ? BERRY_ASSETS.front : null); if (src) { const im = new Image(); im.onload = () => { I.face = im; I.key = ''; }; im.src = src; } } return I.face; };
     if (ok) {
-      const id = g.r && g.r.character === 'zagla' ? 'zagla' : 'strawberry', im = pic(id), name = id === 'zagla' ? 'ZAGLA' : 'CAPTAIN STRAWBERRY';
+      const id = g.r && g.r.character === 'zagla' ? 'zagla' : 'strawberry', im = pic(id), name = id === 'zagla' ? 'ZAGLA' : 'BERRY';
       c.fillText('IDENTITÉ CONFIRMÉE', W / 2, 62);
       c.fillStyle = 'rgba(20,40,70,0.9)'; c.fillRect(34, 86, 190, 250); c.strokeStyle = col; c.lineWidth = 3; c.strokeRect(34, 86, 190, 250);
       if (im) { const sw = im.width, sh = Math.min(im.height, Math.round(im.width * 1.3)); c.save(); c.beginPath(); c.rect(36, 88, 186, 246); c.clip(); const sc = Math.max(186 / sw, 246 / sh); c.drawImage(im, 0, 0, sw, sh, 36 + (186 - sw * sc) / 2, 88, sw * sc, sh * sc); c.restore(); }
