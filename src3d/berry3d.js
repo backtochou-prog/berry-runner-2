@@ -211,22 +211,30 @@ class RunnerBerry extends RunnerSprite {
     // k? = knee flex, f? = ankle (+ toes down), sq = vertical squash, lift = height above the ground (the spin hop, the beat)
     this.REST = { hx: 0, hy: 0, hz: 0, sx: 0, sy: 0, sz: 0, nx: 0, ny: 0, nz: 0, alx: 0, arx: 0, alz: 0.3, arz: 0.3, el: 0.3, er: 0.3, ll: 0, lr: 0, llz: 0.04, lrz: 0.04, kl: 0.06, kr: 0.06, fl: 0, fr: 0, sq: 1, lift: 0, side: 0 };
     this.pose = Object.assign({}, this.REST); this.tp = Object.assign({}, this.REST);
-    this.anim = 'idle'; this.airT = 0; this.landT = 0; this.wasAir = false; this.tip = 0; this.ground = 1; this.hipY = HIP;
+    this._run = this.poseRun.bind(this); this._steer = this.poseSteer.bind(this); this._crouch = this.poseCrouch.bind(this); this._lean = 0;
+    this.limited = { hip: [0, 0], knee: [0, 0], ankle: [0, 0], head: [0, 0, 0], shoulder: [0, 0, 0, 0], elbow: [0, 0] };      // the clamped joint angles of the last frame (filled in place)
+    this.beatK = 0; this.anim = 'idle'; this.airT = 0; this.landT = 0; this.wasAir = false; this.tip = 0; this.ground = 1; this.hipY = HIP;
     this.sec = { bag: { a: 0, v: 0 }, hood: { a: 0, v: 0 }, str: { a: 0, v: 0 }, charm: { a: 0, v: 0 }, leaf: { a: 0, v: 0 }, sway: { a: 0, v: 0 } }; this.prevY = 0; this.prevVy = 0; this.prevLean = 0;
     this.apply(1 / 60, 0, 0);
   }
 
+  // RUN: the legs a stride apart, the swinging knee folded, the arms pumping against the legs, the pelvis and the shoulders counter-turning
+  poseRun(k, fwd) {
+    const t = this.tp, sn = Math.sin(this.phase), cs = Math.cos(this.phase);
+    t.ll = 0.72 * sn * k; t.lr = -0.72 * sn * k; t.kl = 0.22 + 1.4 * Math.max(0, cs) * k; t.kr = 0.22 + 1.4 * Math.max(0, -cs) * k;
+    t.fl = 0.4 * Math.max(0, -sn) * k; t.fr = 0.4 * Math.max(0, sn) * k;                                             // the pushing foot points its toes
+    t.sx = -fwd * k; t.hx = -0.03; t.nx = fwd * 0.75 * k; t.hy = 0.16 * sn * k; t.sy = -0.34 * sn * k; t.ny = 0.18 * sn * k; t.sz = 0.04 * cs * k;
+    t.alx = -0.95 * sn * k; t.arx = 0.95 * sn * k; t.alz = t.arz = 0.2; t.el = 1.45 + 0.35 * sn * k; t.er = 1.45 - 0.35 * sn * k;
+  }
+  // TURN: the body rolls into the turn, the head looks into it
+  poseSteer(k) { const t = this.tp, lean = this._lean; t.hz += -lean * 0.17 * k; t.sz += -lean * 0.06 * k; t.ny += -lean * 0.45 * k; t.nz += -lean * 0.1 * k; t.alz += 0.16 * Math.abs(lean) * k; t.arz += 0.16 * Math.abs(lean) * k; }
+  // CROUCH: folded low, the head kept up
+  poseCrouch() { const t = this.tp; t.ll = t.lr = 1.0; t.kl = t.kr = 2.3; t.llz = t.lrz = 0.16; t.sx = -1.5; t.hx = -0.1; t.nx = 0.45; t.alx = t.arx = -0.9; t.alz = t.arz = 0.35; t.el = t.er = 1.5; t.sq = 0.82; }
+
   // the animation of this frame: its name (the blueprint's sets) and the pose it asks for, written into this.tp; returns how fast the joints follow (1/s)
   choose(dt, s) {
-    const t = Object.assign(this.tp, this.REST), T = s.time, TM = BERRY_RIG.TIMING, sn = Math.sin(this.phase), cs = Math.cos(this.phase), lean = s.lean || 0;
-    const run = (k, fwd) => {                                         // RUN: the legs a stride apart, the swinging knee folded, the arms pumping against the legs, the pelvis and the shoulders counter-turning
-      t.ll = 0.72 * sn * k; t.lr = -0.72 * sn * k; t.kl = 0.22 + 1.4 * Math.max(0, cs) * k; t.kr = 0.22 + 1.4 * Math.max(0, -cs) * k;
-      t.fl = 0.4 * Math.max(0, -sn) * k; t.fr = 0.4 * Math.max(0, sn) * k;                                           // the pushing foot points its toes
-      t.sx = -fwd * k; t.hx = -0.03; t.nx = fwd * 0.75 * k; t.hy = 0.16 * sn * k; t.sy = -0.34 * sn * k; t.ny = 0.18 * sn * k; t.sz = 0.04 * cs * k;
-      t.alx = -0.95 * sn * k; t.arx = 0.95 * sn * k; t.alz = t.arz = 0.2; t.el = 1.45 + 0.35 * sn * k; t.er = 1.45 - 0.35 * sn * k;
-    };
-    const steer = k => { t.hz += -lean * 0.17 * k; t.sz += -lean * 0.06 * k; t.ny += -lean * 0.45 * k; t.nz += -lean * 0.1 * k; t.alz += 0.16 * Math.abs(lean) * k; t.arz += 0.16 * Math.abs(lean) * k; };   // TURN: the body rolls into the turn, the head looks into it
-    const crouch = () => { t.ll = t.lr = 1.0; t.kl = t.kr = 2.3; t.llz = t.lrz = 0.16; t.sx = -1.5; t.hx = -0.1; t.nx = 0.45; t.alx = t.arx = -0.9; t.alz = t.arz = 0.35; t.el = t.er = 1.5; t.sq = 0.82; };   // CROUCH: folded low, the head kept up
+    const t = Object.assign(this.tp, this.REST), T = s.time, TM = BERRY_RIG.TIMING, lean = s.lean || 0;
+    const run = this._run, steer = this._steer, crouch = this._crouch; this._lean = lean;      // (bound once in the constructor: nothing is allocated per frame)
     if (this.wasAir && !s.airborne && s.state === 'play') this.landT = TM.land; this.wasAir = !!s.airborne;
     if (s.airborne) this.airT += dt; else this.airT = 0; if (this.landT > 0 && !s.airborne) this.landT -= dt;
     let rate = 16;
@@ -266,22 +274,29 @@ class RunnerBerry extends RunnerSprite {
     for (const key in p) p[key] += (t[key] - p[key]) * (key === 'lift' ? 1 - Math.exp(-15 * dt) : k);
     this.tip += ((tipping ? -1.35 : 0) - this.tip) * (1 - Math.exp(-15 * dt));               // a crash tips the whole body forward onto its visor
     P.rotation.x = this.tip; P.rotation.z = tipping ? c.rz : 0;
-    if (!(s.state === 'over' && s.absorb)) P.scale.set(1, 1, 1);                             // (the vortex stretches it as it goes down; otherwise the squash is the rig's own)
+    // (the vortex stretches it as it goes down; otherwise the squash is the rig's own, plus THE STRETCH ON THE BEAT that every runner has: 5 % taller in the menu, 2 % in the run, eased like the
+    // base's own. The first build of this body lifted on the beat but no longer stretched: the music test caught it.)
+    { const m = s.beat > 0 && s.state !== 'over' && !s.sliding ? (s.state === 'title' ? 1 : 0.4) * s.beat : 0; this.beatK += (m - this.beatK) * (1 - Math.exp(-15 * dt)); }
+    if (!(s.state === 'over' && s.absorb)) P.scale.set(1 - 0.03 * this.beatK, 1 + 0.05 * this.beatK, 1 - 0.03 * this.beatK);
     P.position.y += p.lift - c.y;                                     // the base's bounce belonged to the flat picture: here the legs make it
     this.ground += ((s.airborne && this.ride < 0.5 ? 0 : 1) - this.ground) * (1 - Math.exp(-30 * dt));
     this.apply(dt, s.time, s.state === 'title' || s.state === 'play' ? 1 : 0, s);
   }
 
+  static clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  // one step of a damped spring S = { a: angle, v: speed } toward `target` (stiffness K, damping D, time step h)
+  static spring(S, target, K, D, h) { S.v += ((target - S.a) * K - S.v * D) * h; S.a += S.v * h; S.a = S.a < -1.2 ? -1.2 : S.a > 1.2 ? 1.2 : S.a; return S.a; }
+
   // the pose onto the bones (every joint clamped to the blueprint's range), the hips set so the lower foot stands on the ground, then the follow-through pieces
   apply(dt, T, alive, s) {
-    const p = this.pose, B = this.bones, L = BERRY_RIG.LIMITS, R0 = BERRY_RIG, cl = (v, a, b) => Math.max(a, Math.min(b, v)), sym = (v, m) => cl(v, -m, m);
-    const hipA = [sym(p.ll, L.hip), sym(p.lr, L.hip)], knee = [cl(p.kl, L.knee[0], L.knee[1]), cl(p.kr, L.knee[0], L.knee[1])], ank = [sym(p.fl, L.ankle), sym(p.fr, L.ankle)];
+    const p = this.pose, B = this.bones, L = BERRY_RIG.LIMITS, R0 = BERRY_RIG, cl = RunnerBerry.clamp, V = this.limited, hipA = V.hip, knee = V.knee, ank = V.ankle;
+    hipA[0] = cl(p.ll, -L.hip, L.hip); hipA[1] = cl(p.lr, -L.hip, L.hip); knee[0] = cl(p.kl, L.knee[0], L.knee[1]); knee[1] = cl(p.kr, L.knee[0], L.knee[1]); ank[0] = cl(p.fl, -L.ankle, L.ankle); ank[1] = cl(p.fr, -L.ankle, L.ankle);
     const breath = alive * Math.sin(T * 2 * Math.PI / BERRY_RIG.TIMING.idle), still = this.anim === 'idle' || this.anim === 'wave' ? 1 : 0.25;      // IDLE: subtle breathing and a slow weight shift
     B.Hips.rotation.set(p.hx, p.hy + p.side * 0.95, p.hz + 0.035 * still * Math.sin(T * 2 * Math.PI / (BERRY_RIG.TIMING.idle * 2)), 'YXZ');
     B.Spine_01.rotation.set(p.sx * 0.35, p.sy * 0.3, p.sz * 0.4); B.Spine_02.rotation.set(p.sx * 0.4, p.sy * 0.35, p.sz * 0.35); B.Spine_03.rotation.set(p.sx * 0.25, p.sy * 0.35, p.sz * 0.25);
     B.Spine_02.scale.setScalar(1 + 0.012 * still * breath);
-    B.Head.rotation.set(sym(p.nx, L.headPitch) - 0.02 * still * breath, sym(p.ny, L.headYaw), sym(p.nz, L.headRoll), 'YXZ');
-    this.limited = { hip: hipA, knee, ankle: ank, head: [B.Head.rotation.x, B.Head.rotation.y, B.Head.rotation.z] };
+    B.Head.rotation.set(cl(p.nx, -L.headPitch, L.headPitch) - 0.02 * still * breath, cl(p.ny, -L.headYaw, L.headYaw), cl(p.nz, -L.headRoll, L.headRoll), 'YXZ');
+    V.head[0] = B.Head.rotation.x; V.head[1] = B.Head.rotation.y; V.head[2] = B.Head.rotation.z;
     let hip = 0;
     for (let i = 0; i < 2; i++) {
       const sgn = i ? 1 : -1, th = hipA[i] + p.hx, lz = i ? p.lrz : p.llz;
@@ -292,20 +307,20 @@ class RunnerBerry extends RunnerSprite {
     }
     this.hipY = hip * this.ground + R0.HIP * (1 - this.ground);       // on the ground the lower foot carries the body (the run's bounce comes from the stride itself); in the air the hips hang at rest
     B.Hips.position.y = this.hipY; this.rig.scale.set(1 + (1 - p.sq) * 0.5, p.sq, 1 + (1 - p.sq) * 0.5);
-    const sh = [sym(p.alx, L.shoulder), sym(p.arx, L.shoulder)], az = [sym(p.alz, L.shoulder), sym(p.arz, L.shoulder)], el = [cl(p.el, L.elbow[0], L.elbow[1]), cl(p.er, L.elbow[0], L.elbow[1])];
-    for (let i = 0; i < 2; i++) { const sgn = i ? 1 : -1; this.arm[i].rotation.set(sh[i], 0, sgn * az[i], 'ZXY'); this.fore[i].rotation.x = el[i]; this.hand[i].rotation.x = 0.15 * Math.sin(T * 6 + i * 1.7) * (this.anim === 'run' ? 1 : 0.2); }
-    this.limited.shoulder = sh.concat(az); this.limited.elbow = el;
+    const sh = V.shoulder, el = V.elbow;                                 // (shoulder: the two swings, then the two spreads)
+    sh[0] = cl(p.alx, -L.shoulder, L.shoulder); sh[1] = cl(p.arx, -L.shoulder, L.shoulder); sh[2] = cl(p.alz, -L.shoulder, L.shoulder); sh[3] = cl(p.arz, -L.shoulder, L.shoulder); el[0] = cl(p.el, L.elbow[0], L.elbow[1]); el[1] = cl(p.er, L.elbow[0], L.elbow[1]);
+    for (let i = 0; i < 2; i++) { const sgn = i ? 1 : -1; this.arm[i].rotation.set(sh[i], 0, sgn * sh[2 + i], 'ZXY'); this.fore[i].rotation.x = el[i]; this.hand[i].rotation.x = 0.15 * Math.sin(T * 6 + i * 1.7) * (this.anim === 'run' ? 1 : 0.2); }
     // FOLLOW-THROUGH (the blueprint's optional physics): light damped springs on the bag, the hood, the drawstrings, the charms and the leaves, pushed by the body's vertical and sideways accelerations
     if (dt > 0) {
       const h = Math.min(dt, 1 / 30), y = this.pivot.position.y + this.group.position.y + this.hipY, vy = (y - this.prevY) / h, acc = Math.max(-60, Math.min(60, (vy - this.prevVy) / h)), lean = s ? s.lean || 0 : 0, lat = Math.max(-8, Math.min(8, (lean - this.prevLean) / h));
       this.prevY = y; this.prevVy = vy; this.prevLean = lean;
-      const step = (S, target, K, D) => { S.v += ((target - S.a) * K - S.v * D) * h; S.a += S.v * h; S.a = Math.max(-1.2, Math.min(1.2, S.a)); return S.a; };
+      const step = RunnerBerry.spring;
       const sc = this.sec, lag = p.sx + p.hx;                                                // (hanging pieces stay plumb when the body leans)
-      this.bag.rotation.x = step(sc.bag, -acc * 0.006, 160, 9) - lag * 0.3; this.bag.rotation.z = step(sc.sway, -lat * 0.05, 120, 8);
-      this.hood.rotation.x = step(sc.hood, acc * 0.004, 220, 12);
-      const st = step(sc.str, -acc * 0.012, 110, 6); this.strings[0].rotation.x = -0.12 + st - lag * 0.8; this.strings[1].rotation.x = -0.12 + st * 0.85 - lag * 0.8; this.strings[0].rotation.z = sc.sway.a * 1.5; this.strings[1].rotation.z = sc.sway.a * 1.5;
-      const ch = step(sc.charm, -acc * 0.02, 90, 4); this.charms[0].rotation.x = ch; this.charms[1].rotation.x = ch * 0.8; this.charms[0].rotation.z = sc.sway.a * 3; this.charms[1].rotation.z = sc.sway.a * 2.5;
-      const lf = step(sc.leaf, -acc * 0.0035, 260, 10); this.leaves.scale.set(1 - lf * 0.35, 1 + lf, 1 - lf * 0.35); this.leaves.rotation.z = sc.sway.a * 0.8;
+      this.bag.rotation.x = step(sc.bag, -acc * 0.006, 160, 9, h) - lag * 0.3; this.bag.rotation.z = step(sc.sway, -lat * 0.05, 120, 8, h);
+      this.hood.rotation.x = step(sc.hood, acc * 0.004, 220, 12, h);
+      const st = step(sc.str, -acc * 0.012, 110, 6, h); this.strings[0].rotation.x = -0.12 + st - lag * 0.8; this.strings[1].rotation.x = -0.12 + st * 0.85 - lag * 0.8; this.strings[0].rotation.z = sc.sway.a * 1.5; this.strings[1].rotation.z = sc.sway.a * 1.5;
+      const ch = step(sc.charm, -acc * 0.02, 90, 4, h); this.charms[0].rotation.x = ch; this.charms[1].rotation.x = ch * 0.8; this.charms[0].rotation.z = sc.sway.a * 3; this.charms[1].rotation.z = sc.sway.a * 2.5;
+      const lf = step(sc.leaf, -acc * 0.0035, 260, 10, h); this.leaves.scale.set(1 - lf * 0.35, 1 + lf, 1 - lf * 0.35); this.leaves.rotation.z = sc.sway.a * 0.8;
     }
   }
 }

@@ -109,6 +109,7 @@ class Renderer {
   drawUI(g) {
     const ctx = this.ctx;
     if (g.state === 'race' && g.race) { this.drawRaceHud(g); this.drawTouch(g); if (g.fadeIn > 0) this.drawSceneOverlay(g); return; }
+    if (g.racePaused) { this.drawRaceHud(g); this.drawTouch(g); this.drawPause(g); if (g.sfx) this.drawSoundBtn(g); return; }      // a paused race: its own HUD under the same PAUSED panel as the run's
     // (g.vr: the 3D build in immersive VR, src3d/xr3d.js. This canvas is then a floating panel, so what covers the whole screen (the flash, the portal light, the fades, the letterbox) and the
     // screen-space scooter disc are left out of it, and so are the keyboard / touch hints; nothing else changes)
     if (g.state === 'over' && g.flash > 0 && !g.vr) { ctx.globalAlpha = 0.5; ctx.fillStyle = C.burg; ctx.fillRect(0, 0, VW, VH); ctx.globalAlpha = 1; }
@@ -394,6 +395,7 @@ class Renderer {
     }
     c.restore(); c.globalAlpha = 1;
   }
+  static get TOUCH_IDS() { return Renderer._touchIds || (Renderer._touchIds = ['left', 'right', 'slide', 'jump', 'pause', 'spin', 'flip', 'ollie']); }      // the buttons that ease in and out when pressed (one shared list)
   drawTouch(g) {
     const L = this.touchLayer();
     if (!g.touch || (g.state !== 'play' && g.state !== 'race')) { if (L) { if (L.dirty) { L.ctx.setTransform(1, 0, 0, 1, 0, 0); L.ctx.clearRect(0, 0, L.cv.width, L.cv.height); L.dirty = false; } L.t = null; L.sig = null; } return; }
@@ -401,9 +403,10 @@ class Renderer {
     if (sm) {
       const now = performance.now(); if (now - sm.syncT > 500 && g.fitTouch) { g.fitTouch(); sm.syncT = now; }                // (keeps the layer on the screen canvas, whatever the layout does)
       const dt = sm.t === null ? 1 : Math.max(0, Math.min(0.1, g.time - sm.t)); sm.t = g.time; this._fade = 1 - (g.fadeIn > 0 ? Math.min(1, g.fadeIn * g.fadeIn) : 0);
-      for (const id of ['left', 'right', 'slide', 'jump', 'pause', 'spin', 'flip', 'ollie']) { const target = Object.values(g.held).includes(id) ? 1 : 0, p = sm.press[id] || 0; sm.press[id] = p + (target - p) * (1 - Math.exp(-18 * dt)); }
+      const heldNow = Object.values(g.held);                                              // (read once a frame: it was rebuilt for each of the eight buttons)
+      for (const id of Renderer.TOUCH_IDS) { const target = heldNow.includes(id) ? 1 : 0, p = sm.press[id] || 0; sm.press[id] = p + (target - p) * (1 - Math.exp(-18 * dt)); }
       // PERFORMANCE: the layer is cleared and redrawn only when something on it changed (a button easing in or out, the fade, a resize), not on every frame: a still layer costs nothing
-      const set = g.touchSet ? g.touchSet() : TOUCH, sig = ['left', 'right', 'slide', 'jump', 'pause', 'spin', 'flip', 'ollie'].map(id => (sm.press[id] || 0).toFixed(2)).join() + '|' + this._fade.toFixed(2) + '|' + sm.cv.width + 'x' + sm.cv.height + '|' + (set === TOUCH ? 'ring' : 'mag' + this.padState(g) + (set.lcd ? 'L' : '') + (g.trick ? 'T' : '') + (g.vehicle || ''));
+      const set = g.touchSet ? g.touchSet() : TOUCH, sig = Renderer.TOUCH_IDS.map(id => (sm.press[id] || 0).toFixed(2)).join() + '|' + this._fade.toFixed(2) + '|' + sm.cv.width + 'x' + sm.cv.height + '|' + 'in' + (g.touchIn || 0) + (set === TOUCH || set.base === TOUCH ? 'ring' : 'mag' + this.padState(g) + (set.lcd ? 'L' : '') + (g.trick ? 'T' : '') + (g.vehicle || ''));
       sm.redraw = sig !== sm.sig; sm.sig = sig;
       if (sm.redraw) { sm.ctx.setTransform(1, 0, 0, 1, 0, 0); sm.ctx.clearRect(0, 0, sm.cv.width, sm.cv.height); sm.dirty = true; sm.draws = (sm.draws || 0) + 1; }
     }

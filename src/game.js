@@ -63,7 +63,7 @@ class Game {
     this.resetRun();
     addEventListener('keydown', e => this.onKey(e, true));
     addEventListener('keyup', e => this.onKey(e, false));
-    const away = () => { this.keys = {}; this.releaseTouch(); if (this.state === 'play') this.state = 'pause'; };
+    const away = () => { this.keys = {}; this.releaseTouch(); if (!(this.loopOwner === 'xr' && this.state === 'race')) this.pause(); };      // (in VR a race is held by the headset's own rules, src3d/xr3d.js) (a race waits too: it used to run on, and be lost, behind a phone call or another tab)
     addEventListener('blur', away); const hide = () => { if (this.loopOwner !== 'xr') away(); }; addEventListener('pagehide', hide); document.addEventListener('visibilitychange', () => { if (document.hidden) hide(); });      /* (not while a VR session owns the frames: entering VR may hide the page for a moment, and the headset has its own pause rules) */      // (a phone's tab switch or lock screen does not always blur the window)
     this.mouse = { x: -1, y: -1, down: false };
     this.look = { yaw: 0, pitch: 0, last: 0, drag: null };      /* FREE LOOK (the user: 'on peut tourner la caméra de vue du joueur en haut, en bas, à droite et à gauche, libre de regarder où il veut ?'): in the kart race, dragging the mouse or a finger over the view turns the camera on the spot (kart3d reads this.look: yaw about the camera's up, pitch about its side, around the chase pose); after 2.5 s without a drag it eases back; C or a double tap recentres at once; in VR the head does it */
@@ -98,7 +98,13 @@ class Game {
       const was = this.mouse.down; this.mouse.down = false; at(e);
       if (was) this.pressAt(this.mouse.x, this.mouse.y);
     });
-    addEventListener('resize', () => this.fit()); addEventListener('orientationchange', () => setTimeout(() => this.fit(), 200));
+    // THE LAYOUT FOLLOWS THE SCREEN, whatever changes it: a resize, a turn of the phone (some browsers report the new size only after the turn has finished: fitted again a little later), the
+    // browser's bars sliding in and out (visualViewport), entering or leaving fullscreen, and a page restored from the back / forward cache
+    const refit = () => { this.fit(); if (this.r && this.r.resize) this.r.resize(); };
+    addEventListener('resize', () => this.fit()); addEventListener('orientationchange', () => { setTimeout(refit, 200); setTimeout(refit, 600); });
+    if (window.visualViewport) visualViewport.addEventListener('resize', refit);
+    for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => { refit(); setTimeout(refit, 300); });
+    addEventListener('pageshow', refit);
     this.fit();
     let last = performance.now(), probe = [], cap = 0;
     // PERFORMANCE: phones with a 120 Hz (or 144 Hz) screen, as most recent Xiaomi / Redmi are, call this loop twice as often as a 60 Hz phone, and the game drew a full frame every time: twice the work for
@@ -129,9 +135,24 @@ class Game {
 
   fit() {
     // whole-number scaling keeps pixels even; on screens too small for 2x (phones in portrait) use the exact fit instead
-    const f = Math.min(innerWidth / VW, innerHeight / VH), s = f >= 2 ? Math.floor(f) : f;
+    // ... inside the SAFE AREA (a notch, a rounded corner, the home bar: the page's body is padded by the same insets, so the canvas is centred in what is left)
+    const ins = this.insets(), W = Math.max(1, innerWidth - ins.l - ins.r), H = Math.max(1, innerHeight - ins.t - ins.b);
+    const f = Math.min(W / VW, H / VH), s = f >= 2 ? Math.floor(f) : f;
     this.cv.style.width = VW * s + 'px'; this.cv.style.height = VH * s + 'px';
+    // THE TOUCH BUTTONS STAY ON THE SCREEN: they are drawn up to TOUCH_OUT canvas pixels outside the screen canvas, toward the edges of a wide phone; where the canvas takes the whole width
+    // (a 16:9 screen in fullscreen, a phone held upright) that margin does not exist and a third of the two outer buttons was off the screen: they move in by what is missing (touchSet)
+    this.touchIn = Math.max(0, Math.min(TOUCH_OUT, Math.ceil(TOUCH_OUT - (W - VW * s) / 2 / s)));
     this.fitTouch();
+    const hint = typeof document !== 'undefined' && document.getElementById('rotate');      // the 'rotate your phone' line (shown by the page's CSS on an upright phone) sits just under the screen canvas
+    if (hint && hint.dataset.follow) hint.style.top = Math.round(this.cv.getBoundingClientRect().bottom + 10) + 'px';
+  }
+  // the safe-area insets in CSS pixels (env(safe-area-inset-*), read through a hidden probe; zero where the browser has none)
+  insets() {
+    if (typeof document === 'undefined' || !document.body) return { l: 0, r: 0, t: 0, b: 0 };
+    let p = this._insetProbe;
+    if (!p) { p = this._insetProbe = document.createElement('div'); p.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)'; document.body.appendChild(p); }
+    const c = getComputedStyle(p), n = v => parseFloat(v) || 0;
+    return { l: n(c.paddingLeft), r: n(c.paddingRight), t: n(c.paddingTop), b: n(c.paddingBottom) };
   }
   // the smooth touch layer (canvas #touch, see Renderer.touchLayer): the same place and size on the page as the screen canvas, one canvas pixel per device pixel up to 2 (a 2.75 phone at full density
   // made a canvas of 3 million pixels redrawn and composited on every frame) (pointer events go through it to the screen canvas)
@@ -185,14 +206,19 @@ class Game {
     if (this.state === 'title' && this.r.nextCharacter && this.overButton(BTN.char)) { this.nextCharacter(); return 'char'; }
     const b = this.activeButton();
     if (b && this.overButton(b)) {
-      if (this.state === 'pause') { this.state = 'play'; return 'resume'; }
-      if (this.state === 'title' && this.touch) this.goFullscreen(); this.start(); return 'start';
+      if (this.state === 'pause') { this.resume(); return 'resume'; }
+      if (this.touch) this.goFullscreen(); this.start(); return 'start';      // (a tap on START or on RETRY is a real gesture: fullscreen is asked for again if the player had left it; never without a tap)
     }
     return null;
   }
   overButton(b) { const m = this.mouse; return m.x >= b.x && m.x <= b.x + b.w && m.y >= b.y && m.y <= b.y + b.h; }
 
-  start() { this.resetRun(); this.state = 'play'; this.emit('start'); }
+  start() { this.resetRun(); this.state = 'play'; this.resumeTo = null; this.emit('start'); }
+  // PAUSE AND RESUME, one way in and one way out for every caller (the P / Esc keys, the pause button, a lost focus, the VR controllers and the headset coming off): a pause remembers what it
+  // interrupted, the run or a RACE, and resume goes back to it. (A race could not be paused at all before: losing the focus in the middle of one let the robot win.)
+  pause() { if (this.state !== 'play' && this.state !== 'race') return false; this.resumeTo = this.state; this.state = 'pause'; this.keys = {}; this.releaseTouch(); this.laneQ = 0; return true; }
+  resume() { if (this.state !== 'pause') return false; this.state = this.resumeTo === 'race' && this.race ? 'race' : 'play'; this.resumeTo = null; this.keys = {}; this.releaseTouch(); this.laneQ = 0; return true; }
+  get racePaused() { return this.state === 'pause' && this.resumeTo === 'race' && !!this.race; }
   // the optional scooter: get on (the nearest parked scooter / station that has an indicator right now; it is taken) or off again, whenever the player wants. Drawing only: the rules are the same.
   mount() { const h = this.scooterHint; if (this.state !== 'play' || this.riding || this.surf || !h) return false; this.riding = true; this.vehicle = h.kind || 'scooter'; this.scooterHint = null; if (this.r.onScooter) this.r.onScooter(this, h); this.emit('mount'); if (this.touch && navigator.vibrate) navigator.vibrate(30); return true; }
   dismount() { if (this.state !== 'play' || !this.riding) return false; this.riding = false; this.emit('dismount'); return true; }
@@ -216,8 +242,9 @@ class Game {
   hold(pid, id, fresh) {
     if (id === null) delete this.held[pid]; else this.held[pid] = id;
     this.syncTouch();
+    if (fresh && id === 'pause' && this.state === 'race') { this.pause(); return; }                  // (the pause button works in a race too)
     if (!fresh || this.state !== 'play') return;
-    if (id === 'jump') this.jump(); else if (id === 'slide') this.slideKey(); else if (id === 'scooter') this.dismount(); else if (id === 'cam') this.camFP = !this.camFP; else if (id === 'spin' || id === 'flip' || id === 'ollie') this.stunt(id); else if (id === 'pause') { this.state = 'pause'; this.releaseTouch(); }
+    if (id === 'jump') this.jump(); else if (id === 'slide') this.slideKey(); else if (id === 'scooter') this.dismount(); else if (id === 'cam') this.camFP = !this.camFP; else if (id === 'spin' || id === 'flip' || id === 'ollie') this.stunt(id); else if (id === 'pause') this.pause();
   }
   // THE RACE'S PEDALS: accelerate = the up key (Z / W / arrow) or the jump button held (touch, or the VR controllers through the same touch channel); brake = the down key or the slide button held
   pedal(id) { return id === 'jump' ? !!(this.keys.up || Object.values(this.held).includes('jump')) : !!(this.keys.down || Object.values(this.held).includes('slide')); }
@@ -246,7 +273,15 @@ class Game {
     const i = Math.floor(z * U3.Z / SEG_LEN); if (!this.r.layoutFor(b.to, i).some(q => q.prop === 'coastBike')) return null;
     const m = ((i % 20) + 20) % 20; return { edge: b.hi - 0.12, c: b.hi + 0.31, entry: m <= 1 };
   }
-  touchSet() { return !this.riding ? TOUCH : this.vehicle !== 'board' && !this.camFP && typeof MAG_PAD_ART !== 'undefined' ? TOUCH_MAG : TOUCH_RIDE; }      // (on foot / the scooter with its LCD / any vehicle without, or in the rider's eyes)      // (the magnetic scooter's controller while riding it)
+  touchSet() {
+    const base = !this.riding ? TOUCH : this.vehicle !== 'board' && !this.camFP && typeof MAG_PAD_ART !== 'undefined' ? TOUCH_MAG : TOUCH_RIDE, d = this.touchIn || 0;
+    if (!d) return base;                                                                   // (room for the outer margin: the layout as designed)
+    let c = base._in; if (!c || c.d !== d) {                                              // the same layout with its left group moved in by d and its right group by -d (built once per d, not per frame)
+      c = base.map(t => { const m = t.x + t.w / 2; return m < VW * 0.35 ? Object.assign({}, t, { x: t.x + d }) : m > VW * 0.65 ? Object.assign({}, t, { x: t.x - d }) : t; });
+      if (base.lcd) c.lcd = Object.assign({}, base.lcd, { x: base.lcd.x - d }); c.d = d; c.base = base; base._in = c;
+    }
+    return c;
+  }      // (on foot / the scooter with its LCD / any vehicle without, or in the rider's eyes)      // (the magnetic scooter's controller while riding it)
   syncTouch() { const h = Object.values(this.held); this.tleft = h.includes('left'); this.tright = h.includes('right'); }
   releaseTouch() { this.held = {}; this.syncTouch(); }
   goFullscreen() { // hides the browser bars and asks for landscape (Android Chrome); silently ignored elsewhere
@@ -260,7 +295,8 @@ class Game {
     const c = e.code, k = (e.key || '').toLowerCase();                                    // by position (WASD cluster: on an AZERTY keyboard that is ZQSD) and by letter (Q Z D S on any layout)
     const L = c === 'ArrowLeft' || c === 'KeyA' || k === 'q', R = c === 'ArrowRight' || c === 'KeyD' || k === 'd', U = c === 'ArrowUp' || c === 'KeyW' || k === 'z', D = c === 'ArrowDown' || c === 'KeyS' || k === 's';
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'].includes(c)) e.preventDefault();
-    if (L) this.keys.left = down;
+    const spinKey = down && (c === 'KeyQ' || k === 'q') && c !== 'KeyA' && this.state === 'play' && this.riding && this.p.jy > 0;      // Q is 'left' by its letter and the SPIN stunt: in the air on a vehicle, where the stunt is what the press means, it no longer steers as well (one press, one action)
+    if (L && !spinKey) this.keys.left = down;
     if (R) this.keys.right = down;
     if (U) this.keys.up = down; if (D) this.keys.down = down;                          // (held: the race's pedals read them; a run acts on the press only, below)
     if (down && !e.repeat && this.state === 'race') { if (L) this.laneQ = (this.laneQ || 0) - 1; if (R) this.laneQ = (this.laneQ || 0) + 1; }                 // in the race a press changes lane (one lane per press)
@@ -280,9 +316,10 @@ class Game {
       else if (D) this.slideKey();
       else if (c === 'KeyE' || k === 'e') { if (this.riding) this.dismount(); else this.mount(); }
       else if (c === 'KeyV' || k === 'v') { if (this.riding) this.camFP = !this.camFP; }
-      else if (c === 'KeyQ' || k === 'q') this.stunt('spin'); else if (c === 'KeyF' || k === 'f') this.stunt('flip'); else if (c === 'KeyO' || k === 'o') this.stunt('ollie');          // the stunts on a vehicle (in the air)          // V: on a vehicle, the second camera (the rider's own eyes) on / off          // E: get on the scooter that has an indicator / get off
-      else if (c === 'KeyP' || c === 'Escape') this.state = 'pause';
-    } else if (s === 'pause' && (c === 'KeyP' || c === 'Escape')) this.state = 'play';
+      else if (c === 'KeyQ' || (k === 'q' && c !== 'KeyA')) this.stunt('spin'); else if (c === 'KeyF' || k === 'f') this.stunt('flip'); else if (c === 'KeyO' || k === 'o') this.stunt('ollie');          // the stunts on a vehicle (in the air)          // V: on a vehicle, the second camera (the rider's own eyes) on / off          // E: get on the scooter that has an indicator / get off
+      else if (c === 'KeyP' || c === 'Escape') this.pause();
+    } else if (s === 'race' && (c === 'KeyP' || c === 'Escape')) this.pause();                       // (a race pauses like the run; the honour lap's own Esc, handled above, still leaves it)
+    else if (s === 'pause' && (c === 'KeyP' || c === 'Escape')) this.resume();
   }
 
   update(dt) {
@@ -503,6 +540,10 @@ class Game {
   endRace() {
     const R = this.race; if (R && R.result === 'win') this.coins += 30;
     this.race = null; this.state = 'play'; this.fadeIn = 0.6; this.p.speed = BASE_SPEED; this.p.x = this.world.playerBand(this.p.z, this.p.x).c || this.p.x; this.keys = {};
+    // BACK ON THE ROAD, fairly: nothing of the race's input is carried into the run (a finger still on the accelerator is the jump button here, a queued lane change, a buffered jump), the
+    // runner stands on the ground, and the hazards of the first stretch are taken away: the road comes back out of a fade, and what stood in it could not be seen, let alone dodged
+    this.releaseTouch(); this.laneQ = 0; this.jumpBuf = 0; this.p.vx = 0; this.p.vy = 0; this.p.jy = 0; this.p.slide = 0; this.trick = null; this.olliePop = null;
+    { const z0 = this.p.z, z1 = z0 + BASE_SPEED * 1.6; this.world.items = this.world.items.filter(it => !(OBST[it.kind] && it.z > z0 - 20 && it.z < z1)); }
   }
 
   // free steering across the road, the junction choice, and keeping the runner on its road

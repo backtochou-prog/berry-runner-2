@@ -146,7 +146,7 @@ class GameAudio {
         try { c.volume = Math.max(0, Math.min(1, this.musicVol * cw)); } catch (e) {}
       }
       // THE RACE ZONE has its own track (the user's 'Casablanca Trance'): while a race runs it takes the whole mix over, in over 1.2 s and out over 1.8 s, and it starts from its beginning on every race
-      const wantR = s === 'race' ? 1 : 0, r = this.musicRace, rrate = 1 / (wantR > this.raceW ? 1.2 : 1.8);
+      const wantR = s === 'race' || g.racePaused ? 1 : 0, r = this.musicRace,      /* (a paused race keeps its track: it is still the race) */ rrate = 1 / (wantR > this.raceW ? 1.2 : 1.8);
       this.raceW = wantR > this.raceW ? Math.min(wantR, this.raceW + dt * rrate) : Math.max(wantR, this.raceW - dt * rrate);
       const rw = this.raceW * this.raceW * (3 - 2 * this.raceW);
       if (r && wantR && r.paused) { const kart = !!(g.race && g.race.kart && this.beatsKart); if (kart !== this.kartSrc) { this.kartSrc = kart; try { r.src = kart ? this.srcKart : this.srcRace; } catch (e) {} this.beatsRace = kart ? this.beatsKart : this.beatsRace0; } }      // the KART CIRCUIT plays the user's 'Road Night 2' (assets/music_kart.mp3) on the race's player
@@ -166,8 +166,8 @@ class GameAudio {
     }
     else if (this.eng) this.engine(false);
     if (s !== this.lastState) {
-      if (this.lastState === 'play' && s === 'pause') this.play('pause');
-      else if (this.lastState === 'pause' && s === 'play') this.play('resume');
+      if ((this.lastState === 'play' || this.lastState === 'race') && s === 'pause') this.play('pause');
+      else if (this.lastState === 'pause' && (s === 'play' || s === 'race')) this.play('resume');
       else if (s === 'over' && this.lastState === 'play') this.play('over', 0.45);
       this.lastState = s;
     }

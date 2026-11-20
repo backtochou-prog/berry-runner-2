@@ -89,7 +89,7 @@ class XR3D {
     g.loopOwner = 'xr'; this.last = -1;
     if (g.state === 'race' && g.race && g.race.menu) g.kartChoose('chase');                // the kart's quick menu cannot be used with the controllers: the session start is the choice (the camera behind)
     // entering VR can blur the page (and the Game pauses on blur): a run that was going on goes on
-    if (wasPlay === 'play') setTimeout(() => { if (this.presenting && g.state === 'pause') g.state = 'play'; }, 600);
+    if (wasPlay === 'play' || wasPlay === 'race') setTimeout(() => { if (this.presenting && g.state === 'pause') g.resume(); }, 600);
   }
   // the headset's frame loop. It is registered just before the session starts, so it may be called by the window for a moment before that: it only works while presenting
   loop() {
@@ -127,7 +127,7 @@ class XR3D {
   // the headset lost tracking, the session was hidden (the system menu, the headset taken off), or a controller went away mid-press: nothing stays held, a run waits
   interrupt() {
     if (this.input) this.input.release();
-    const g = this.game; if (g.state === 'play') { g.state = 'pause'; g.releaseTouch(); }
+    const g = this.game; if (g.state === 'play') g.pause();
     else if (g.state === 'race' && g.race && !g.race.done && !g.race.menu) { g.race.hold = true; g.releaseTouch(); }      // a race (the kart's gate rule loses it for whoever is slow) waits too: Game.raceStep stands still while it is held
   }
   visibility() { if (this.session && this.session.visibilityState !== 'visible') this.interrupt(); }
@@ -144,7 +144,7 @@ class XR3D {
     this.game.vr = false; this.game.mouse.x = this.game.mouse.y = -1; this.game.mouse.down = false; this.active = null;
     this.unmountRig(this.rigMain, this.r3.camera); this.unmountRig(this.rigRace, this.rigRace && this.rigRace.userData.cam);
     this.cleanup();
-    if (this.game.state === 'play') this.game.state = 'pause';                          // the headset came off: the run waits
+    if (this.game.state === 'play') this.game.pause();                                  // the headset came off: the run waits
     this.label('ENTER VR');
     setTimeout(() => { try { if (!this.presenting) this.r3.resize(); } catch (e) {} }, 0);      // (after three has finished ending the session: it refuses a resize while still presenting)
   }

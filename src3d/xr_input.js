@@ -83,8 +83,8 @@ class XRInput {
         if (act('jump')) this.fire(h, 'jump');
         else if (act('slide')) this.fire(h, 'slide');
         if (act('scooter')) { if (g.riding) g.dismount(); else g.mount(); }
-        if (act('pause')) { g.state = 'pause'; g.releaseTouch(); this.release(); }
-      } else if (g.state === 'pause' && act('pause')) { g.state = 'play'; }
+        if (act('pause')) { g.pause(); this.release(); }
+      } else if (g.state === 'pause' && act('pause')) { g.resume(); }
       if (menu) {
         if (down(0)) { this.pointer = h.name; this.pressDown(); }
         if (up(0) && this.pointer === h.name) this.pressUp();

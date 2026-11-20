@@ -315,7 +315,7 @@ class Renderer3D {
     const pool = this.props[name], n = this.propUsed[name];
     if (!pool || n >= pool.length) { this.dropped++; this.droppedBy[name] = (this.droppedBy[name] || 0) + 1; return; }
     this.propUsed[name] = n + 1;
-    const o = pool[n]; o.position.set(x, y, z); o.rotation.y = rotY; if (sc || o.scale.x !== 1) o.scale.setScalar(sc || 1); o.visible = true;
+    const o = pool[n]; o.position.set(x, y, z); o.rotation.y = rotY; if (sc || o.scale.x !== 1) o.scale.setScalar(sc || 1); o.visible = true; return o;
   }
 
   // PERFORMANCE, adaptive resolution. The 3D picture STARTS at 1.5 device pixels per CSS pixel (what every phone has coped with so far) and may go as high as 2.25 (PR_CEIL, or the screen's own density if lower):
@@ -342,7 +342,7 @@ class Renderer3D {
   draw(g) {
     this.syncDetour(g);
     this.adapt();
-    if (g.state === 'race' && g.race) {                                                              // the race zone: its own scene (src3d/race3d.js) on the same renderer, under the pixel HUD
+    if ((g.state === 'race' && g.race) || g.racePaused) {                                            // the race zone (a paused race stays on screen, still): its own scene (src3d/race3d.js) on the same renderer, under the pixel HUD
       if (!this.race3d) this.race3d = new Race3D(); if (g.state !== 'pause') this.lastT = g.time;
       if (g.race.kart && typeof Kart3D !== 'undefined') { if (!this.kart3d) this.kart3d = new Kart3D(this.race3d); this.kart3d.draw(g, this.renderer); } else
       this.race3d.draw(g, this.renderer); this.uiCtx.clearRect(0, 0, VW, VH); this.ui.drawUI(g); return;
@@ -461,7 +461,11 @@ class Renderer3D {
             }
             let py = WALK_Y + dyb((zs + pl.dist) / U.Z) + (pl.dy || 0), pz = rz - zs - pl.dist;
             if (pl.live) { py += Math.sin(g.time * 0.8 + i * 1.7 + pl.x) * 0.45; pz += Math.sin(g.time * 0.35 + i) * 2.2; }                    // a creature of the aquarium drifts a little (up and down, along the road)
-            this.place(pl.prop, cx + pl.x, py, pz, (pl.x < 0 ? Math.PI : 0) + (pl.rotY || 0) - Math.atan2(c1 - c0, SL));
+            const placed = this.place(pl.prop, cx + pl.x, py, pz, (pl.x < 0 ? Math.PI : 0) + (pl.rotY || 0) - Math.atan2(c1 - c0, SL));
+            // THE VAULT OF THE AQUARIUM TUNNEL FOLLOWS THE SLOPE: a rib carries the 12 m dark lines of its slot, and it was only ever turned (never tipped), so on the two ramps of the tunnel (13 m down
+            // over 300 m, and back up) every slot's lines lay level and the vault broke into a staircase of loose dark bars, up to 0.8 m apart at each rib. The rib is tipped to the slope of its own slot
+            // (and set at the mean height of its two ends), so the lines of one slot end where the next ones begin, down the dive and up the rise.
+            if (placed && pl.prop === 'aquaRib') { const h0 = dyb(zs / U.Z), h1 = dyb((zs + SL) / U.Z); placed.rotation.x = Math.atan2(h1 - h0, SL); placed.position.y = WALK_Y + (h0 + h1) / 2; }
             if (pl.prop === 'coastPad') this.padsNow.push({ id: i, x: cx + pl.x, y: WALK_Y + dyb((zs + pl.dist) / U.Z), z: rz - zs - pl.dist });
           }
         }
