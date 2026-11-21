@@ -1,71 +1,110 @@
-// RunnerZagla: ZAGLA, the second character, as a real 3D body, the size of Captain Strawberry (1.29 m wide with the arms, 1.9 m tall, 0.83 m deep: his artwork's own dimensions), (ZAGLA_ASSETS, made by tools/make_zagla_assets.py from the user's picture of her): her silhouette inflated into a volume (a round cross-section),
-// wearing the user's picture on the FRONT (its own colours) and the BACK of C.Strawberry, fitted onto her shape and recoloured into her palette, as the material of the BACK (the view the chase camera sees).
-// The body is one piece; the two legs are their own pieces, pivoting at the hips, and swing in the run. It has the same interface as RunnerSprite (group, shadow, update(dt, state), cur, the vehicles: it stands
-// on the scooter, the board and the surfboard like the strawberry does), so the renderer and the tests treat both alike; unlike the flat cards it is a true 3D body: it keeps the heading of its group (it turns with the
-// road), and in the menu it faces the camera (its front) while the camera drifts round it.
-// Facing -Z like the other runners: the BACK surface is at +Z (toward the chase camera), the FRONT at -Z.
-class RunnerZagla extends RunnerSprite {
-  constructor() {
-    super();
-    for (const k in this.cards) this.pivot.remove(this.cards[k]);                    // not the strawberry's artwork
-    const A = ZAGLA_ASSETS, MX = A.mppx, MY = A.mppy, MZ = A.mppz, S = A.step, u8 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
-    const tex = {};
-    for (const k of ['front', 'back']) {
-      const img = new Image(), t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter;
-      img.onload = () => { t.needsUpdate = true; }; img.src = A[k]; tex[k] = t;
-    }
-    // HER SIDE PICTURE (A.side, the user's retouched side view of herself): the texture of the flanks. It is projected along x (the u coordinate is the depth z, v the height), and every pixel of the body mixes it with the front or back
-    // picture by how much its surface faces sideways (smoothstep of |normal.x| from 0.3 to 0.65, only on the egg of her body and her legs: the thin arms and the hair keep their own pictures), so the front and the back pictures meet the side picture without a seam.
-    if (A.side) { const img = new Image(), t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; img.onload = () => { t.needsUpdate = true; }; img.src = A.side.src; tex.side = t; }
-    this.tex = tex;
-    // lit, glossy (a specular sheen on the black), and the picture's own colours kept bright by an emissive copy of it (so the neon stays neon in every biome's light)
-    const mat = t => new THREE.MeshPhongMaterial({ map: t, emissiveMap: t, emissive: 0xffffff, emissiveIntensity: 0.6, specular: 0x666666, shininess: 60, alphaTest: 0.5, side: THREE.DoubleSide });      /* (alphaTest: her outline is cut by her picture's own edge, not by the 4 px steps of the mesh) */
-    this.mats = { front: mat(tex.front), back: mat(tex.back) };
-    if (tex.side) for (const k of ['front', 'back']) {
-      const m = this.mats[k]; m.customProgramCacheKey = () => 'zagla-side';
-      m.onBeforeCompile = sh => {
-        sh.uniforms.sideMap = { value: tex.side };
-        sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec2 uvSide; attribute float sideK; varying vec2 vUvSide; varying float vSideW;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvUvSide = uvSide;').replace('#include <project_vertex>', '#include <project_vertex>\n// the egg and the legs: by how much the surface faces sideways; an ARM (sideK about 0.67, her side picture copied on it): by how much the camera looks along her x axis, so that the drawn arm shows from the side and her own arm from the front\nfloat sideSee = abs(dot(normalize(-mvPosition.xyz), normalize(modelViewMatrix[0].xyz)));\nvSideW = (sideK > 0.5 && sideK < 0.8) ? smoothstep(0.55, 0.85, sideSee) : smoothstep(0.72, 0.92, abs(objectNormal.x)) * sideK;');
-        sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D sideMap; varying vec2 vUvSide; varying float vSideW;')
-          .replace('#include <map_fragment>', 'vec4 sideC = texture2D(sideMap, vUvSide);\n#ifdef USE_MAP\nvec4 sampledDiffuseColor = texture2D(map, vMapUv); sampledDiffuseColor = mix(sampledDiffuseColor, sideC, vSideW); diffuseColor *= sampledDiffuseColor;\n#endif')
-          .replace('#include <emissivemap_fragment>', '#ifdef USE_EMISSIVEMAP\nvec4 emissiveColor = texture2D(emissiveMap, vEmissiveMapUv); emissiveColor = mix(emissiveColor, sideC, vSideW); totalEmissiveRadiance *= emissiveColor.rgb;\n#endif');
-      };
-    }
-    const surface = (P, face, ox, oy) => {                                           // one face of a piece: the grid vertices (x, y, +-z), the picture's coordinates as the UVs (the back one mirrored: it is the view from behind)
-      // a back face with its own silhouette (P.b: the legs, whose boots seen from behind are not the front's) has its grid in the back texture's coordinates; otherwise it is the front's grid, mirrored
-      const own = face === 'back' && P.b, D = own ? P.b : P, n = D.n, ij = new Uint16Array(u8(D.ij).buffer), zz = new Int16Array(u8(D.z).buffer), tri = new Uint16Array(u8(D.tri).buffer), sg = face === 'front' ? -1 : 1, zo = D.zo ? new Int16Array(u8(D.zo).buffer) : null, sw = D.sw ? u8(D.sw) : null, su = D.su ? new Uint16Array(u8(D.su).buffer) : null;      // su: the coordinates of an ARM vertex on her side picture, four numbers (front face u v, back face u v): the arm she drew there is copied onto the arm, 65535 = from the position      // zo: the shift of the middle of each row toward the back (the side silhouette of the strawberry)
-      const pos = new Float32Array(n * 3), uv = new Float32Array(n * 2);
-      for (let k = 0; k < n; k++) {
-        const x = ij[2 * k] * S, y = ij[2 * k + 1] * S, xf = own ? (A.w - 1) - x : x;
-        pos[3 * k] = (A.axis - xf) * MX - ox; pos[3 * k + 1] = (A.foot - y) * MY - oy; pos[3 * k + 2] = (sg * zz[k] + (zo ? zo[k] : 0)) / 8 * MZ;
-        uv[2 * k] = own ? x / A.w : face === 'front' ? x / A.w : 1 - x / A.w; uv[2 * k + 1] = 1 - y / A.h;
-      }
-      const idx = new Uint16Array(tri);
-      // the winding that makes the normals point outward (+Z for the back face, -Z for the front one): checked on the first triangle, the whole list flipped if need be
-      const a = idx[0] * 3, b = idx[1] * 3, c = idx[2] * 3, nz = (pos[b] - pos[a]) * (pos[c + 1] - pos[a + 1]) - (pos[b + 1] - pos[a + 1]) * (pos[c] - pos[a]);
-      if ((nz > 0) !== (sg > 0)) for (let k = 0; k < idx.length; k += 3) { const t = idx[k + 1]; idx[k + 1] = idx[k + 2]; idx[k + 2] = t; }
-      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-      if (A.side) { const Sd = A.side, us = new Float32Array(n * 2); for (let k = 0; k < n; k++) { us[2 * k] = (Sd.w / 2 + (pos[3 * k + 2] - Sd.zc) * Sd.ppm) / Sd.w; us[2 * k + 1] = 1 - (Sd.foot - (pos[3 * k + 1] + oy) * Sd.ppm) / Sd.h; if (su && su[4 * k] !== 65535) { const o4 = face === 'front' ? 0 : 2; us[2 * k] = su[4 * k + o4] / 65534; us[2 * k + 1] = su[4 * k + o4 + 1] / 65534; } } const sk = new Float32Array(n); for (let k = 0; k < n; k++) sk[k] = sw ? sw[k] / 255 : 1; g.setAttribute('uvSide', new THREE.BufferAttribute(us, 2)); g.setAttribute('sideK', new THREE.BufferAttribute(sk, 1)); }       /* (the side picture: u from the depth z, v from the height above her soles) */ g.setIndex(new THREE.BufferAttribute(idx, 1));
-      g.computeVertexNormals(); g.computeBoundingSphere(); g.computeBoundingBox(); return g;
-    };
-    this.parts = {}; this.legs = []; this.tris = 0;
-    for (const P of A.pieces) {
-      const leg = P.name !== 'body', ox = leg ? (A.axis - P.pivot[0]) * MX : 0, oy = leg ? (A.foot - P.pivot[1]) * MY : 0, grp = new THREE.Group();
-      grp.position.set(ox, oy, 0);
-      for (const face of ['front', 'back']) { const g = surface(P, face, ox, oy), m = new THREE.Mesh(g, this.mats[face]); grp.add(m); this.tris += g.index.count / 3; }
-      this.pivot.add(grp); this.parts[P.name] = grp; if (leg) this.legs.push(grp);
-    }
-    this.legAmp = 0;
-  }
+// RunnerZagla: ZAGLA, the second character, rebuilt from the user's character sheet (docs/zagla/zagla-character-sheet.png, "3D Game Character, Reimagined Design, No Electronic Eyes") the way
+// Berry was: a rigged 3D body on the SAME rig and the SAME motion as Berry (RunnerBerry, src3d/berry3d.js: the blueprint's bones, joint ranges and animation sets: idle, run, the jump in three
+// phases, land, crouch, turn, the stances on the vehicles, the trip, the menu's showcase). Only the body differs:
+//   - ONE TALL EGG for a body and a head: glossy red with yellow dots, narrow at the belt and widest at the visor, a cream crown over a red band, a seam down the back;
+//   - ONE glossy black wraparound VISOR (no eyes), its lower edge a V at the front, sweeping back along both sides in a yellow-edged point;
+//   - neon green HAIR: thick strands from the crown, swept over her right brow down across the visor, a few short ones behind (her follow-through piece: it flops like Berry's leaves);
+//   - pink lips on the belly; a black oval panel with brass rivets on each side, where the arms hang: a cream shoulder, a black jointed sleeve, a pointed red hand;
+//   - a lilac line and a navy belt with a ring at the front; long thin navy leggings fading to lilac; chunky sneakers in yellow, teal and red on a white and lilac sole.
+// The same interface as every runner (group, shadow, pivot, update(dt, state), cur) and the same vehicles. 1.9 m from the soles to the hair; her legs are longer than Berry's (the hips at 0.70 m).
+class RunnerZagla extends RunnerBerry {
+  build(K) {
+    const { shiny, leafMat, mesh, bone, col, G, flat, surf, raw, M4 } = K;
+    const RED = '#ee2026', RED_L = '#ff5a3c', RED_D = '#b3121c', BLACK = '#0a0a10', COAL = '#17161c', CREAM = '#ffe9b0', GOLD = '#ffd23a', GREEN = '#58f01c', PINK = '#e8208c', NAVY = '#1a2160', LILAC = '#c6b8ff', TEAL = '#3fbf9f', YEL = '#ffd92e', BRASS = '#d9a23a', STEEL = '#3a3644';
+    const D = this.dims = { HIP: 0.70, THIGH: 0.25, CALF: 0.27, SOLE: 0.18 };
 
-  update(dt, s) {
-    if (s.state === 'pause') return;                                                  // hold the pose
-    super.update(dt, s);
-    this.pivot.rotation.y = this.pivot.rotation.y + this.group.rotation.y - (s.faceYaw || 0);   // a 3D body keeps the heading of the group (the card cancels it); only the showcase spin stays
-    const T = s.time, run = s.state === 'play' && !s.sliding && !s.airborne && this.ride < 0.5, show = s.state === 'title' && T % 10 >= 7.6;
-    const amp = run ? 1 : show ? 0.8 : 0, k = 1 - Math.exp(-12 * dt); this.legAmp += (amp - this.legAmp) * k;
-    const a = Math.sin(this.phase) * 0.75 * this.legAmp, tuck = s.airborne ? -0.55 : s.sliding ? -0.9 : 0;                  // in the air the legs tuck forward, in the slide they stick out
-    this.legs[0].rotation.x += (a + tuck - this.legs[0].rotation.x) * Math.min(1, k * 1.5);
-    if (this.legs[1]) this.legs[1].rotation.x += (-a + tuck - this.legs[1].rotation.x) * Math.min(1, k * 1.5);
+    // ---------------------------------------------------------------- the skeleton (the blueprint's hierarchy; the egg is one rigid piece on Spine_03, so the spine's whole lean reaches it)
+    this.bones = {};
+    this.rig = bone('Root', this.pivot, 0, 0, 0);
+    const hips = bone('Hips', this.rig, 0, D.HIP, 0), sp1 = bone('Spine_01', hips, 0, 0, 0), sp2 = bone('Spine_02', sp1, 0, 0.04, 0), sp3 = bone('Spine_03', sp2, 0, 0.04, 0);
+    bone('Head', bone('Neck', sp3, 0, 0.62, 0), 0, 0.06, 0);
+    const E = y => y - 0.08;                                            // height above the hips -> Spine_03's coordinates
+
+    // ---------------------------------------------------------------- THE EGG (Spine_03): 1.14 m tall, 0.37 m across at the belt, 0.70 m at the visor
+    const TOP = 1.14, WIDE = 0.74, DZ = 0.9, sm = t => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
+    const eggH = y => y < WIDE ? 0.185 + 0.165 * Math.pow(sm(y / WIDE), 0.9) : 0.35 * Math.sqrt(Math.max(0, 1 - Math.pow((y - WIDE) / (TOP - WIDE), 2.05)));      // the radius at a height above the hips
+    const R = y => eggH(y + 0.08), X = (y, f, infl = 0) => (eggH(y) + infl) * Math.sin(f), Z = (y, f, infl = 0) => -(eggH(y) + infl) * DZ * Math.cos(f);       // (f: the angle from the front, toward her right)
+    const eg = [];
+    eg.push(G(col(surf(R, E(0.06), E(0.99), { rows: 24, segs: 36, dz: DZ }), RED_L, { gain: 1.2 }), RED, 2.0));                                   // the red body
+    eg.push(G(col(surf(R, E(0.99), E(TOP), { rows: 8, segs: 36, dz: DZ, yc: E(0.9) }), '#fff3cf', { gain: 1.1 }), CREAM, 0.7));                   // the cream crown
+    eg.push(col(surf(R, E(0), E(0.06), { rows: 1, segs: 36, dz: DZ, infl: 0.006, capBot: true }), NAVY));                                          // the navy belt
+    eg.push(col(surf(R, E(0.06), E(0.085), { rows: 1, segs: 36, dz: DZ, infl: 0.008 }), LILAC, { gain: 1.1 }));                                     // the lilac line over it
+    eg.push(col(raw(new THREE.TorusGeometry(0.046, 0.012, 6, 18), STEEL, M4(0, E(0.035), Z(0.035, 0, 0.012))), STEEL), flat(Kit.box(0.02, 0.02, 0.012, 0.046, E(0.035) - 0.01, Z(0.035, 0, 0.014), BRASS)));   // its ring
+    eg.push(col(surf(R, E(0.1), E(0.97), { rows: 10, segs: 1, f0: Math.PI - 0.014, f1: Math.PI + 0.014, dz: DZ, infl: 0.004, yc: E(0.5) }), RED_D));   // the seam down the back
+    // the visor: a V at the front (lowest at the middle), level on top, narrowing to a point behind each side
+    const VF = 2.2, vT = f => 0.90 - 0.22 * Math.pow(Math.min(1, Math.abs(f) / VF), 3), vB = f => 0.56 + 0.12 * Math.pow(Math.min(1, Math.abs(f) / VF), 0.9);
+    const vis = [G(col(surf(R, f => E(vB(f)), f => E(vT(f)), { rows: 8, segs: 44, f0: -VF, f1: VF, dz: DZ, infl: 0.012, yc: E(0.74) }), '#232a5c'), BLACK, 0.6),
+      col(Kit.ico(0.03, X(0.82, -0.5, 0.016), E(0.82), Z(0.82, -0.5, 0.016), '#cfe0ff', { sx: 2.6, sy: 0.7, sz: 0.2, detail: 1, rz: 0.2, ry: 0.5, glow: true }), '#cfe0ff')];
+    for (const s of [-1, 1]) {                                                                                                                      // its yellow edge along both sides
+      eg.push(col(surf(R, f => E(vB(f) - 0.028), f => E(vB(f)), { rows: 1, segs: 14, f0: s * 0.95, f1: s * (VF + 0.03), dz: DZ, infl: 0.014, yc: E(0.74) }), GOLD, { gain: 1.15 }));
+      eg.push(col(surf(R, f => E(vT(f)), f => E(vT(f) + 0.024), { rows: 1, segs: 12, f0: s * 1.2, f1: s * (VF + 0.03), dz: DZ, infl: 0.014, yc: E(0.74) }), GOLD, { gain: 1.15 }));
+    }
+    // a black oval panel on each side, rimmed with brass rivets: the arms hang from it
+    const PW = 0.6, PC = 0.38, PH = 0.25, side = (f, s) => Math.sqrt(Math.max(0, 1 - Math.pow((f - s * Math.PI / 2) / PW, 2)));
+    for (const s of [-1, 1]) {
+      eg.push(col(surf(R, f => E(PC - PH * side(f, s)), f => E(PC + PH * side(f, s)), { rows: 6, segs: 12, f0: s * Math.PI / 2 - PW, f1: s * Math.PI / 2 + PW, dz: DZ, infl: 0.012, yc: E(PC) }), COAL));
+      for (let k = 0; k < 9; k++) { const a = k / 9 * Math.PI * 2, f = s * Math.PI / 2 + Math.cos(a) * PW * 0.8, y = PC + Math.sin(a) * PH * 0.8; eg.push(col(Kit.ico(0.013, X(y, f, 0.014), E(y), Z(y, f, 0.014), BRASS, { detail: 0, glow: true }), BRASS)); }
+    }
+    // the pink lips on the belly
+    eg.push(col(Kit.ico(0.1, 0.0, E(0.33), Z(0.33, 0, 0.004), PINK, { sx: 1.45, sy: 0.3, sz: 0.12, detail: 1, rz: 0.06 }), PINK, { gain: 1.15 }), col(Kit.ico(0.075, 0.03, E(0.36), Z(0.36, 0.08, 0.004), PINK, { sx: 1.35, sy: 0.3, sz: 0.12, detail: 1, rz: 0.16 }), PINK, { gain: 1.15 }));
+    {                                                                                                                                              // the yellow dots, scattered over the red (a fixed sequence): none on the visor, the panels or the lips
+      let seed = 77; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647, placed = []; let tries = 0;
+      while (placed.length < 40 && tries++ < 4000) {
+        let f = rnd() * Math.PI * 2; if (f > Math.PI) f -= Math.PI * 2; const y = 0.13 + rnd() * 0.84, af = Math.abs(f);
+        if (af < VF + 0.12 && y < vT(f) + 0.04 && y > vB(f) - 0.06) continue;
+        if (Math.abs(af - Math.PI / 2) < PW + 0.12 && Math.abs(y - PC) < PH + 0.06) continue;
+        if (af < 0.6 && Math.abs(y - 0.345) < 0.09) continue; if (af > Math.PI - 0.1) continue;
+        const x = X(y, f, 0.003), z = Z(y, f, 0.003); if (placed.some(q => (q[0] - x) ** 2 + (q[1] - y) ** 2 + (q[2] - z) ** 2 < 0.11 * 0.11)) continue;
+        placed.push([x, y, z]); eg.push(Kit.ico(0.012 + rnd() * 0.005, x, E(y), z, GOLD, { sz: 0.5, detail: 0, ry: -f, glow: true }));
+      }
+      this.dots = placed.length;
+    }
+    sp3.add(mesh(eg)); sp3.add(mesh(vis, shiny));
+    // the hair: thick neon green strands from the crown, most of them swept over her right brow and down across the visor, four short ones behind and to her left. Its own piece (it flops).
+    const strand = (f0, f1, yEnd, rad) => {
+      const pts = []; for (let k = 0; k <= 8; k++) { const u = k / 8, y = TOP - 0.005 - (TOP - 0.005 - yEnd) * Math.pow(u, 1.25), f = f0 + (f1 - f0) * u, lift = 0.018 + 0.01 * Math.sin(Math.PI * u); pts.push(new THREE.Vector3(X(y, f, lift), E(y), Z(y, f, lift))); }
+      return col(raw(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 14, rad, 5, false), GREEN, M4(0, 0, 0)), GREEN, { gain: 1.25 });
+    };
+    const hr = [];
+    for (const [f0, f1, yEnd, rad] of [[0.9, 0.1, 0.66, 0.026], [1.05, 0.38, 0.6, 0.027], [1.2, 0.62, 0.64, 0.025], [1.3, 0.86, 0.7, 0.026], [1.45, 1.12, 0.62, 0.024], [1.6, 1.4, 0.72, 0.025], [1.8, 1.72, 0.8, 0.023], [0.7, -0.18, 0.86, 0.024], [0.5, -0.5, 0.95, 0.022],
+      [2.3, 2.4, 0.97, 0.022], [3.0, 3.2, 1.0, 0.021], [-1.2, -1.5, 0.99, 0.021], [-2.2, -2.5, 1.0, 0.021]]) hr.push(strand(f0, f1, yEnd, rad));
+    hr.push(col(Kit.ico(0.06, 0.03, E(TOP) + 0.005, 0.01, GREEN, { sy: 0.5, detail: 1 }), GREEN, { gain: 1.25 }));                                 // where they meet on the crown
+    this.leaves = new THREE.Group(); this.leaves.position.y = E(TOP); const hm = mesh(hr, leafMat); hm.position.y = -E(TOP); this.leaves.add(hm); sp3.add(this.leaves);
+
+    // ---------------------------------------------------------------- THE ARMS (Spine_03): a cream shoulder, a black jointed sleeve, a pointed red hand
+    this.arm = []; this.fore = []; this.hand = [];
+    const UA = 0.2, FA = 0.2;
+    for (const s of [-1, 1]) {                                          // s = -1: the LEFT arm (at -x), +1: the right
+      const N = s < 0 ? 'L' : 'R', sh = bone('Shoulder_' + N, sp3, s * (eggH(0.5) - 0.02), E(0.5), 0), up = bone('Arm_' + N, sh, s * 0.05, 0, 0);
+      up.add(mesh([col(Kit.ico(0.078, 0, 0, 0, CREAM, { detail: 2 }), CREAM, { gain: 1.1 }), G(col(Kit.cyl(0.064, 0.056, UA - 0.03, 0, -UA, 0, COAL, { seg: 12 }), '#24232c'), BLACK)]));
+      const fo = bone('Forearm_' + N, up, 0, -UA, 0);
+      fo.add(mesh([col(Kit.ico(0.06, 0, 0, 0, COAL, { detail: 1 }), '#24232c'), G(col(Kit.cyl(0.056, 0.044, FA, 0, -FA, 0, COAL, { seg: 12 }), '#24232c'), BLACK), col(Kit.cyl(0.058, 0.056, 0.01, 0, -0.07, 0, STEEL, { seg: 12 }), STEEL), col(Kit.cyl(0.05, 0.048, 0.01, 0, -0.15, 0, STEEL, { seg: 12 }), STEEL)]));
+      const hn = bone('Hand_' + N, fo, 0, -FA, 0);
+      hn.add(mesh([G(col(Kit.ico(0.052, 0, -0.07, 0, RED, { sx: 0.95, sy: 1.75, detail: 2 }), RED_L, { gain: 1.15 }), RED)]));
+      this.arm.push(up); this.fore.push(fo); this.hand.push(hn);
+    }
+
+    // ---------------------------------------------------------------- THE LEGS (Hips): long thin navy leggings fading to lilac, sneakers in yellow, teal and red on a white and lilac sole
+    this.leg = []; this.calf = []; this.foot = [];
+    const TH = D.THIGH, CF = D.CALF, SO = D.SOLE;
+    for (const s of [-1, 1]) {
+      const N = s < 0 ? 'L' : 'R', lg = bone('Leg_' + N, hips, s * 0.085, 0, 0);
+      lg.add(mesh([col(Kit.ico(0.078, 0, 0, 0, NAVY, { detail: 1 }), NAVY), col(Kit.cyl(0.076, 0.06, TH, 0, -TH, 0, NAVY, { seg: 12 }), NAVY)]));
+      const cf = bone('Calf_' + N, lg, 0, -TH, 0);
+      cf.add(mesh([col(Kit.ico(0.062, 0, 0, 0, NAVY, { detail: 1 }), NAVY), G(col(Kit.cyl(0.06, 0.044, CF, 0, -CF, 0, NAVY, { seg: 12 }), NAVY), LILAC, 1.6)]));
+      const ft = bone('Foot_' + N, cf, 0, -CF, 0);
+      ft.add(mesh([
+        col(Kit.cyl(0.05, 0.05, 0.05, 0, 0.0, 0, LILAC, { seg: 12 }), LILAC),                                                                    // the lilac sock
+        G(col(Kit.ico(0.09, 0, -0.055, -0.035, TEAL, { sx: 0.98, sy: 0.95, sz: 1.6, detail: 2 }), YEL, { gain: 1.1 }), TEAL, 1.4),               // the upper: yellow on top, teal below
+        col(Kit.ico(0.066, 0, -0.078, -0.15, YEL, { sx: 1.2, sy: 0.85, sz: 0.95, detail: 1 }), YEL, { gain: 1.1 }),                               // the yellow toe
+        flat(Kit.box(0.172, 0.055, 0.31, 0, -0.158, -0.035, '#ffffff')), flat(Kit.box(0.182, 0.024, 0.32, 0, -SO, -0.035, '#d9a8ff')),           // the white midsole on the lilac outsole
+        flat(Kit.box(0.172, 0.03, 0.055, 0, -0.15, 0.135, '#d9a8ff', { rx: 0.5 })),                                                              // the heel's kick
+        flat(Kit.box(0.012, 0.045, 0.12, s * 0.088, -0.085, -0.02, RED, { rx: 0.25 })), flat(Kit.box(0.012, 0.03, 0.09, -s * 0.088, -0.09, 0.0, RED, { rx: -0.2 })),   // the red flashes on the sides
+        col(Kit.cyl(0.06, 0.058, 0.03, 0, -0.03, 0.005, NAVY, { seg: 12 }), NAVY),                                                                // the navy collar
+        flat(Kit.box(0.06, 0.045, 0.085, 0, -0.03, -0.065, RED, { rx: -0.6 })),                                                                  // the tongue
+        ...[0, 1, 2].map(k => flat(Kit.box(0.09, 0.013, 0.016, 0, -0.014 - k * 0.014, -0.075 - k * 0.028, YEL, { rx: -0.55, ry: k % 2 ? 0.25 : -0.25 }))),   // the yellow laces
+        flat(Kit.box(0.035, 0.05, 0.012, 0, -0.06, 0.108, NAVY))]));                                                                              // the heel tab
+      this.leg.push(lg); this.calf.push(cf); this.foot.push(ft);
+    }
   }
 }

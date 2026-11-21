@@ -1,0 +1,16 @@
+<!doctype html>
+<!-- POD CAR preview: the race car alone, to compare with docs/car/pod-car-sheet.png: front, side, rear, top and a three-quarter view -->
+<meta charset="utf-8"><title>Pod car preview</title>
+<style>html,body{margin:0;background:#0b0d14;overflow:hidden}canvas{display:block}</style>
+<body><script src="../vendor/three.min.js"></script><script src="../src/track.js"></script><script src="../src3d/kit.js"></script><script src="../src3d/pod_car.js"></script>
+<script>
+const W = innerWidth, H = innerHeight, renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); renderer.setSize(W, H); document.body.appendChild(renderer.domElement); renderer.autoClear = false;
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#0b0d14');
+scene.add(new THREE.HemisphereLight(0xffffff, 0x334466, 1.3)); const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(-3, 5, -2); scene.add(sun); const back = new THREE.DirectionalLight(0x88aaff, 0.9); back.position.set(3, 3, 5); scene.add(back);
+const car = PodCar.build(); scene.add(car); window.__car = car;
+const views = [[0, 0.8, -9], [9, 0.8, 0], [0, 0.8, 9], [0, 9, 0.01], [-5.5, 3.2, -6.5], [4.5, 2.6, 7]];
+function frame() { renderer.clear(); const n = views.length, w = Math.floor(W / 3), h = Math.floor(H / 2);
+  views.forEach((v, i) => { const cam = new THREE.PerspectiveCamera(28, w / h, 0.1, 100); cam.position.set(v[0], v[1], v[2]); cam.lookAt(0, 0.7, 0); renderer.setViewport((i % 3) * w, H - h - Math.floor(i / 3) * h, w, h); renderer.setScissor((i % 3) * w, H - h - Math.floor(i / 3) * h, w, h); renderer.setScissorTest(true); renderer.render(scene, cam); });
+  window.__frames = (window.__frames || 0) + 1; requestAnimationFrame(frame); }
+frame();
+</script>

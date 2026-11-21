@@ -1,8 +1,8 @@
 <!doctype html>
-<!-- BERRY preview: the avatar alone, to compare with docs/berry/*.png. ?view=turn (front / right / back / left), ?view=poses (the blueprint's animation sets, frozen), ?view=live (animated: &anim=run|idle|jump|crouch|title) -->
+<!-- BERRY / ZAGLA preview: an avatar alone, to compare with docs/berry/*.png and docs/zagla/zagla-character-sheet.png (&who=zagla). ?view=turn (front / right / back / left), ?view=poses (the blueprint's animation sets, frozen), ?view=live (animated: &anim=run|idle|jump|crouch|title) -->
 <meta charset="utf-8"><title>Berry preview</title>
 <style>html,body{margin:0;background:#15141a;overflow:hidden}canvas{display:block}</style>
-<body><script src="../vendor/three.min.js"></script><script src="../src/track.js"></script><script src="../src3d/kit.js"></script><script src="../src3d/runner_sprite.js"></script><script src="../src3d/berry3d.js"></script>
+<body><script src="../vendor/three.min.js"></script><script src="../src/track.js"></script><script src="../src3d/kit.js"></script><script src="../src3d/runner_sprite.js"></script><script src="../src3d/berry3d.js"></script><script src="../src3d/zagla3d.js"></script>
 <script>
 const q = new URLSearchParams(location.search), view = q.get('view') || 'turn';
 const W = innerWidth, H = innerHeight, renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); renderer.setSize(W, H); renderer.setPixelRatio(+q.get('dpr') || 1); document.body.appendChild(renderer.domElement);
@@ -16,7 +16,7 @@ const list = SETS[view] || [['live', {}, +q.get('yaw') || 0.6]], N = list.length
 const hw = Math.max(N * 0.75, 1.2 * W / H), hh = hw * H / W, cam = new THREE.OrthographicCamera(-hw, hw, -0.2 + 2 * hh, -0.2, 0.1, 50);
 cam.position.set(0, 0, 10);
 list.forEach(([name, o, yaw], i) => {
-  const r = new RunnerBerry(); r.group.position.x = (i - (N - 1) / 2) * 1.5; r.group.rotation.y = yaw; scene.add(r.group); r.shadow.position.set(r.group.position.x, 0.01, 0); scene.add(r.shadow); runners.push(r);
+  const r = q.get('who') === 'zagla' ? new RunnerZagla() : new RunnerBerry(); r.group.position.x = (i - (N - 1) / 2) * 1.5; r.group.rotation.y = yaw; scene.add(r.group); r.shadow.position.set(r.group.position.x, 0.01, 0); scene.add(r.shadow); runners.push(r);
   if (view !== 'live') { const s = st(o); if (o.ph !== undefined) { s.runRate = 0; r.phase = o.ph; } if (o.air) r.airT = o.air; for (let k = 0; k < 120; k++) { if (o.air) r.airT = o.air; if (o.land) { r.landT = 0.05; r.wasAir = false; } r.update(1 / 60, s); } r.label = name; }
 });
 window.__berry = runners;

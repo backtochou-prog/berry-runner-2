@@ -23,8 +23,13 @@ const BERRY_RIG = {
 class RunnerBerry extends RunnerSprite {
   constructor() {
     super();
-    const RED = '#ee2026', RED_L = '#ff5a3c', BLACK = '#0a0a10', BEIGE = '#f8e2c4', BEIGE_D = '#ecc9a2', PINK = '#ff4f9e', PINK_L = '#ff8cc4', NAVY = '#16227a', LILAC = '#cdb6ff', GREEN = '#4ae02c', GREEN_D = '#27a81e', YEL = '#ffd23a', CREAM = '#fff0dc', STEEL = '#c9ccd6', CYAN = '#35e6ff';
-    const R0 = BERRY_RIG, mats = Kit.materials();
+    this.build(this.tools()); this.tris = Math.round(this.tris);         // the body (overridden by the other characters built on this rig: RunnerZagla)
+    this.initPose();
+  }
+
+  // the modelling tools every body of this rig is built with: the glossy materials, smooth merged meshes, named bones, bands of surfaces of revolution, drawings laid on them, flat stars
+  tools() {
+    const mats = Kit.materials();
     // glossy, smooth-shaded materials: a Phong sheen like the sheet's renders (vertex colours; the thin leaves are two-sided)
     const gloss = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 60, specular: 0x555555 }), shiny = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 140, specular: 0xaaaaaa }), leafMat = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 40, specular: 0x333333, side: THREE.DoubleSide });
     for (const m of [gloss, shiny, leafMat]) { m.customProgramCacheKey = () => 'berry-lift'; m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n#ifdef USE_COLOR\ntotalEmissiveRadiance += vColor.rgb * 0.36;\n#endif'); }; }   // its own colours kept bright in every biome's light (the night streets too)
@@ -84,6 +89,14 @@ class RunnerBerry extends RunnerSprite {
     const M4 = (px, py, pz, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => new THREE.Matrix4().compose(new THREE.Vector3(px, py, pz), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(sx, sy, sz));
     const lerpPts = pts => y => { if (y <= pts[0][0]) return pts[0][1]; for (let k = 1; k < pts.length; k++) if (y <= pts[k][0]) { const t = (y - pts[k - 1][0]) / (pts[k][0] - pts[k - 1][0]), e = t * t * (3 - 2 * t); return pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * e; } return pts[pts.length - 1][1]; };
 
+    return { gloss, shiny, leafMat, mesh, bone, from, col, G, flat, surf, decal, star2, starFlat, raw, M4, lerpPts };
+  }
+
+  // BERRY's body, hung on the blueprint's bones
+  build(K) {
+    const { gloss, shiny, leafMat, mesh, bone, from, col, G, flat, surf, decal, star2, starFlat, raw, M4, lerpPts } = K;
+    const RED = '#ee2026', RED_L = '#ff5a3c', BLACK = '#0a0a10', BEIGE = '#f8e2c4', BEIGE_D = '#ecc9a2', PINK = '#ff4f9e', PINK_L = '#ff8cc4', NAVY = '#16227a', LILAC = '#cdb6ff', GREEN = '#4ae02c', GREEN_D = '#27a81e', YEL = '#ffd23a', CREAM = '#fff0dc', STEEL = '#c9ccd6', CYAN = '#35e6ff';
+    const R0 = this.dims = BERRY_RIG;                                  // the leg lengths the pose solver uses (hip height, thigh, calf, sole)
     // ---------------------------------------------------------------- the skeleton (the blueprint's hierarchy)
     this.bones = {};
     const HIP = R0.HIP, A = y => y - HIP;                              // absolute height (soles = 0) -> the hips' own coordinates
@@ -204,8 +217,9 @@ class RunnerBerry extends RunnerSprite {
         flat(Kit.box(0.04, 0.06, 0.012, 0, -0.06, 0.128, PINK))]));                                                                             // the heel tab
       this.leg.push(lg); this.calf.push(cf); this.foot.push(ft);
     }
-    this.tris = Math.round(this.tris);
+  }
 
+  initPose() {
     // ---------------------------------------------------------------- the pose: joint angles eased toward the targets of the current animation
     // h = hips, s = spine, n = head (x pitch, y yaw, z roll); a?x = shoulder swing (+ forward), a?z = arm away from the body, e? = elbow flex, l? = hip flex (+ forward), l?z = leg out,
     // k? = knee flex, f? = ankle (+ toes down), sq = vertical squash, lift = height above the ground (the spin hop, the beat)
@@ -213,7 +227,7 @@ class RunnerBerry extends RunnerSprite {
     this.pose = Object.assign({}, this.REST); this.tp = Object.assign({}, this.REST);
     this._run = this.poseRun.bind(this); this._steer = this.poseSteer.bind(this); this._crouch = this.poseCrouch.bind(this); this._lean = 0;
     this.limited = { hip: [0, 0], knee: [0, 0], ankle: [0, 0], head: [0, 0, 0], shoulder: [0, 0, 0, 0], elbow: [0, 0] };      // the clamped joint angles of the last frame (filled in place)
-    this.beatK = 0; this.anim = 'idle'; this.airT = 0; this.landT = 0; this.wasAir = false; this.tip = 0; this.ground = 1; this.hipY = HIP;
+    this.beatK = 0; this.anim = 'idle'; this.airT = 0; this.landT = 0; this.wasAir = false; this.tip = 0; this.ground = 1; this.hipY = this.dims.HIP;
     this.sec = { bag: { a: 0, v: 0 }, hood: { a: 0, v: 0 }, str: { a: 0, v: 0 }, charm: { a: 0, v: 0 }, leaf: { a: 0, v: 0 }, sway: { a: 0, v: 0 } }; this.prevY = 0; this.prevVy = 0; this.prevLean = 0;
     this.apply(1 / 60, 0, 0);
   }
@@ -289,7 +303,7 @@ class RunnerBerry extends RunnerSprite {
 
   // the pose onto the bones (every joint clamped to the blueprint's range), the hips set so the lower foot stands on the ground, then the follow-through pieces
   apply(dt, T, alive, s) {
-    const p = this.pose, B = this.bones, L = BERRY_RIG.LIMITS, R0 = BERRY_RIG, cl = RunnerBerry.clamp, V = this.limited, hipA = V.hip, knee = V.knee, ank = V.ankle;
+    const p = this.pose, B = this.bones, L = BERRY_RIG.LIMITS, R0 = this.dims, cl = RunnerBerry.clamp, V = this.limited, hipA = V.hip, knee = V.knee, ank = V.ankle;
     hipA[0] = cl(p.ll, -L.hip, L.hip); hipA[1] = cl(p.lr, -L.hip, L.hip); knee[0] = cl(p.kl, L.knee[0], L.knee[1]); knee[1] = cl(p.kr, L.knee[0], L.knee[1]); ank[0] = cl(p.fl, -L.ankle, L.ankle); ank[1] = cl(p.fr, -L.ankle, L.ankle);
     const breath = alive * Math.sin(T * 2 * Math.PI / BERRY_RIG.TIMING.idle), still = this.anim === 'idle' || this.anim === 'wave' ? 1 : 0.25;      // IDLE: subtle breathing and a slow weight shift
     B.Hips.rotation.set(p.hx, p.hy + p.side * 0.95, p.hz + 0.035 * still * Math.sin(T * 2 * Math.PI / (BERRY_RIG.TIMING.idle * 2)), 'YXZ');
@@ -316,11 +330,12 @@ class RunnerBerry extends RunnerSprite {
       this.prevY = y; this.prevVy = vy; this.prevLean = lean;
       const step = RunnerBerry.spring;
       const sc = this.sec, lag = p.sx + p.hx;                                                // (hanging pieces stay plumb when the body leans)
-      this.bag.rotation.x = step(sc.bag, -acc * 0.006, 160, 9, h) - lag * 0.3; this.bag.rotation.z = step(sc.sway, -lat * 0.05, 120, 8, h);
-      this.hood.rotation.x = step(sc.hood, acc * 0.004, 220, 12, h);
-      const st = step(sc.str, -acc * 0.012, 110, 6, h); this.strings[0].rotation.x = -0.12 + st - lag * 0.8; this.strings[1].rotation.x = -0.12 + st * 0.85 - lag * 0.8; this.strings[0].rotation.z = sc.sway.a * 1.5; this.strings[1].rotation.z = sc.sway.a * 1.5;
-      const ch = step(sc.charm, -acc * 0.02, 90, 4, h); this.charms[0].rotation.x = ch; this.charms[1].rotation.x = ch * 0.8; this.charms[0].rotation.z = sc.sway.a * 3; this.charms[1].rotation.z = sc.sway.a * 2.5;
-      const lf = step(sc.leaf, -acc * 0.0035, 260, 10, h); this.leaves.scale.set(1 - lf * 0.35, 1 + lf, 1 - lf * 0.35); this.leaves.rotation.z = sc.sway.a * 0.8;
+      const sway = step(sc.sway, -lat * 0.05, 120, 8, h);                                   // (a body carries what it has: Berry all of these, Zagla her hair)
+      if (this.bag) { this.bag.rotation.x = step(sc.bag, -acc * 0.006, 160, 9, h) - lag * 0.3; this.bag.rotation.z = sway; }
+      if (this.hood) this.hood.rotation.x = step(sc.hood, acc * 0.004, 220, 12, h);
+      if (this.strings) { const st = step(sc.str, -acc * 0.012, 110, 6, h); this.strings[0].rotation.x = -0.12 + st - lag * 0.8; this.strings[1].rotation.x = -0.12 + st * 0.85 - lag * 0.8; this.strings[0].rotation.z = sway * 1.5; this.strings[1].rotation.z = sway * 1.5; }
+      if (this.charms) { const ch = step(sc.charm, -acc * 0.02, 90, 4, h); this.charms[0].rotation.x = ch; this.charms[1].rotation.x = ch * 0.8; this.charms[0].rotation.z = sway * 3; this.charms[1].rotation.z = sway * 2.5; }
+      if (this.leaves) { const lf = step(sc.leaf, -acc * 0.0035, 260, 10, h); this.leaves.scale.set(1 - lf * 0.35, 1 + lf, 1 - lf * 0.35); this.leaves.rotation.z = sway * 0.8; }
     }
   }
 }

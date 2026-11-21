@@ -129,6 +129,8 @@ class Race3D {
       bl.visible = false; G.add(bl);
       const gl = new THREE.Mesh(this.plane(Wc * 1.1, Lc * 1.05), this.carGlow); gl.rotation.x = -Math.PI / 2; gl.position.set(0, 0.015, z0); G.add(gl);
       G.userData = { pic: rear, halo: [], brakeLight: bl, concept: true }; this.carModel = this.car; this.car = G; }
+    // THE POD CAR (src3d/pod_car.js): the player's car rebuilt from the user's sheet as a 3D model. It takes the place of the car above (kept as this.carModel, not in the scene).
+    if (typeof PodCar !== 'undefined') { if (!this.carModel) this.carModel = this.car; this.car = PodCar.build({ brakeMat: this.brakeLightMat, glowMat: this.carGlow }); }
     sc.add(this.car);
     // THE ROBOT'S CAR, in 3D from the user's own pictures: its head-on view at the back and at the front of the pod, and its SIDE view on both flanks (mirrored on the far one). Each picture is drawn once
     // for the paint and twice more additively so its neon is lit, with a pink halo round the whole pod.
