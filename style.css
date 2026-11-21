@@ -1,3 +1,4 @@
+@font-face { font-family: Fredoka; src: url(assets/fonts/fredoka.woff2) format('woff2'); font-weight: 300 700; font-display: swap; }   /* the game's font (SIL Open Font License, assets/fonts/OFL-Fredoka.txt): the menus */
 html, body { margin: 0; height: 100%; background: #1b1420; overflow: hidden; overscroll-behavior: none; }
 body { height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center;
        -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; touch-action: none; }

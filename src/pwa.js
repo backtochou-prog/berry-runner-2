@@ -9,7 +9,7 @@
   let deferred = null, btn = null, tip = null;
   const make = () => {
     btn = document.createElement('button'); btn.id = 'install'; btn.type = 'button'; btn.textContent = 'INSTALL APP';
-    btn.style.cssText = 'position:fixed;left:50%;bottom:calc(10px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:20;display:none;padding:9px 18px;border:2px solid #ff4f9e;border-radius:999px;background:#151022;color:#fff;font:bold 13px/1 system-ui,sans-serif;letter-spacing:.08em;box-shadow:0 0 14px rgba(255,79,158,.55);touch-action:manipulation;cursor:pointer';
+    btn.style.cssText = 'position:fixed;left:50%;bottom:calc(10px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:20;display:none;padding:9px 18px;border:2px solid #ff4f9e;border-radius:999px;background:#151022;color:#fff;font:700 13px/1 Fredoka,system-ui,sans-serif;letter-spacing:.08em;box-shadow:0 0 14px rgba(255,79,158,.55);touch-action:manipulation;cursor:pointer';
     btn.addEventListener('click', async ev => {
       ev.stopPropagation();
       if (deferred) { deferred.prompt(); try { await deferred.userChoice; } catch (e) {} deferred = null; show(); }

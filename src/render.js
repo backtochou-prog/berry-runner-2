@@ -109,7 +109,7 @@ class Renderer {
   drawUI(g) {
     const ctx = this.ctx;
     if (g.state === 'race' && g.race) { this.drawRaceHud(g); this.drawTouch(g); if (g.fadeIn > 0) this.drawSceneOverlay(g); return; }
-    if (g.racePaused) { this.drawRaceHud(g); this.drawTouch(g); this.drawPause(g); if (g.sfx) this.drawSoundBtn(g); return; }      // a paused race: its own HUD under the same PAUSED panel as the run's
+    if (g.racePaused) { this.drawRaceHud(g); this.drawTouch(g); const hq = this.hiMenu(g) ? (this._hq = []) : null; this.drawPause(g); this._hq = null; if (hq) this.drawMenuHi(g, this.touchLayer(), hq); if (g.sfx) this.drawSoundBtn(g); return; }      // a paused race: its own HUD under the same PAUSED panel as the run's
     // (g.vr: the 3D build in immersive VR, src3d/xr3d.js. This canvas is then a floating panel, so what covers the whole screen (the flash, the portal light, the fades, the letterbox) and the
     // screen-space scooter disc are left out of it, and so are the keyboard / touch hints; nothing else changes)
     if (g.state === 'over' && g.flash > 0 && !g.vr) { ctx.globalAlpha = 0.5; ctx.fillStyle = C.burg; ctx.fillRect(0, 0, VW, VH); ctx.globalAlpha = 1; }
@@ -118,9 +118,11 @@ class Renderer {
     this.drawTouch(g);
     if (g.state === 'play' && !g.vr) this.drawScooterHint(g);
     if (g.scene || g.fadeIn > 0) this.drawSceneOverlay(g);
+    const hq = this.menuKind(g) && this.hiMenu(g) ? (this._hq = []) : null;      // the menus: their panels and button faces on the pixel canvas, their lettering on the smooth layer
     if (g.state === 'title') this.drawTitle(g);
     else if (g.state === 'pause') this.drawPause(g);
     else if (g.state === 'over' && g.overT > g.overDelay) this.drawOver(g);
+    this._hq = null; if (hq) this.drawMenuHi(g, this.touchLayer(), hq);
     if (g.sfx && g.state !== 'play' && g.state !== 'scene') this.drawSoundBtn(g);
   }
 
@@ -292,8 +294,9 @@ class Renderer {
   }
 
   // ---- interface: compact plates and buttons share one border/plum/amber language
-  txt(s, x, y, col, sc = 1, sh = C.ink) { const o = Math.max(1, sc >> 1); drawText(this.ctx, s, x + o, y + o, sh, sc); drawText(this.ctx, s, x, y, col, sc); }
-  ctr(s, y, col, sc = 1, sh = C.ink) { this.txt(s, Math.round((VW - textW(s, sc)) / 2), y, col, sc, sh); }
+  // (while a menu is being drawn for the smooth layer, this._hq collects its text instead: Renderer.drawMenuHi letters it in the game's font at the screen's resolution)
+  txt(s, x, y, col, sc = 1, sh = C.ink) { if (this._hq) { this._hq.push([s, x, y, col, sc, 0]); return; } const o = Math.max(1, sc >> 1); drawText(this.ctx, s, x + o, y + o, sh, sc); drawText(this.ctx, s, x, y, col, sc); }
+  ctr(s, y, col, sc = 1, sh = C.ink) { if (this._hq) { this._hq.push([s, VW / 2, y, col, sc, 1]); return; } this.txt(s, Math.round((VW - textW(s, sc)) / 2), y, col, sc, sh); }
   panel(x, y, w, h) {
     const c = this.ctx;
     // BERRY RUNNER 2's panel: deep night violet (a shade lighter toward the top), a neon pink frame with a soft glow line inside it, lime ticks at the corners
@@ -312,12 +315,14 @@ class Renderer {
   hiMenu(g) { return !!this.touchLayer() && !g.vr; }
   // THE MENUS IN HIGH RESOLUTION: the logo of the title screen and the headings of the pause and game-over panels are drawn as smooth lettering on the layer that carries the touch buttons
   // during a run (it is free on these screens), at the screen's own pixel density instead of the 320 x 180 grid. Drawn once per screen (and again after a resize): a still layer costs nothing.
-  drawMenuHi(g, L) {
-    const kind = g.state === 'title' ? 'title' : g.state === 'pause' ? 'pause' : g.state === 'over' && g.overT > g.overDelay ? 'over' : '';
+  menuKind(g) { return g.state === 'title' ? 'title' : g.state === 'pause' ? 'pause' : g.state === 'over' && g.overT > g.overDelay ? 'over' : ''; }
+  drawMenuHi(g, L, q) {
+    const kind = this.menuKind(g);
     if (!kind || !this.hiMenu(g)) return false;
-    const sig = kind + '|' + L.cv.width + 'x' + L.cv.height + '|' + (this.menu3d ? 3 : 2) + (kind === 'over' && g.pk ? 'p' : '');
+    if (this._font === undefined) { this._font = 0; try { document.fonts.load('700 12px Fredoka').then(() => { this._font = 1; }, () => {}); } catch (e) {} }      // (the game's font, assets/fonts/fredoka.woff2: the menu is lettered again once it has arrived)
+    const sig = kind + '|' + L.cv.width + 'x' + L.cv.height + '|' + (this.menu3d ? 3 : 2) + (kind === 'over' && g.pk ? 'p' : '') + this._font + '|' + (q ? q.join(';') : '');
     if (sig === L.msig && L.dirty) return true;
-    const c = L.ctx, k = L.cv.width / (VW + 2 * TOUCH_OUT), T = Renderer.THEME, FONT = '"Trebuchet MS", "Segoe UI", "Helvetica Neue", Arial, sans-serif';
+    const c = L.ctx, k = L.cv.width / (VW + 2 * TOUCH_OUT), T = Renderer.THEME, FONT = 'Fredoka, "Trebuchet MS", "Segoe UI", "Helvetica Neue", Arial, sans-serif';
     c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, L.cv.width, L.cv.height); c.setTransform(k, 0, 0, k, TOUCH_OUT * k, 0); L.dirty = true; L.msig = sig; L.t = null; L.sig = null;
     const word = (str, x, y, px, o) => {                          // a word with a dark edge, a soft neon glow and a vertical gradient (o.align, o.italic, o.space, o.a / o.b: the gradient)
       c.save(); c.font = (o.italic ? 'italic ' : '') + '900 ' + px + 'px ' + FONT; c.textAlign = o.align || 'left'; c.textBaseline = 'alphabetic'; if (o.space && 'letterSpacing' in c) c.letterSpacing = o.space + 'px';
@@ -334,6 +339,12 @@ class Renderer {
       word('2', x0 + 68 * s, y0 + 11 * s, 30 * s, { italic: true, a: '#fff6c9', b: T.gold, glow: T.gold });
     } else if (kind === 'pause') word('PAUSED', VW / 2, 79, 15, { align: 'center', a: '#ffffff', b: T.pinkL, space: 1.2 });
     else word('GAME OVER', VW / 2, g.pk ? 36 : 54, 15, { align: 'center', a: '#ffffff', b: T.pink, space: 1 });
+    // every line of the menu (the hints, the figures of the run, the labels of the buttons): the same places and colours as the pixel lettering it replaces, in the game's font
+    if (q) for (const [str, x, y, colr, sc, mid, edge] of q) {
+      const px = sc >= 3 ? 17 : sc === 2 ? 12.5 : 7.4;
+      c.font = (sc >= 2 ? '700 ' : '600 ') + px + 'px ' + FONT; c.textAlign = mid ? 'center' : 'left'; c.textBaseline = 'top'; if ('letterSpacing' in c) c.letterSpacing = (sc >= 2 ? 0.5 : 0.35) + 'px';
+      c.lineJoin = 'round'; c.lineWidth = px * 0.26; c.strokeStyle = edge || T.ink; c.strokeText(str, x, y - 0.6); c.fillStyle = colr; c.fillText(str, x, y - 0.6);
+    }
     return true;
   }
   plate(x, y, w, h, edge = C.ink) {
@@ -352,6 +363,7 @@ class Renderer {
       if (pr) { c.fillStyle = 'rgba(40,10,60,0.32)'; c.fillRect(b.x, b.y, b.w, b.h); } else if (hov) { c.fillStyle = 'rgba(90,230,70,0.30)'; c.fillRect(b.x, b.y, b.w, b.h); }
       const tw = textW(b.label, 2), tx = Math.round(b.x + (b.w - tw) / 2), ty = b.y + 3 + (pr ? 1 : 0);
       c.fillStyle = 'rgba(14,8,26,0.82)'; c.fillRect(tx - 3, ty - 2, tw + 6, 14);
+      if (this._hq) this._hq.push([b.label, b.x + b.w / 2, ty, pr ? '#2f9a2a' : hov ? '#b4f58c' : '#5ee83c', 2, 1]); else
       drawText(c, b.label, tx, ty, pr ? '#2f9a2a' : hov ? '#b4f58c' : '#5ee83c', 2);   // a green label
       return;
     }
@@ -360,7 +372,7 @@ class Renderer {
     c.fillStyle = pr ? T.pinkD : hov ? T.pinkL : T.pink; c.fillRect(b.x, b.y, b.w, b.h);
     if (!pr) { c.fillStyle = T.pinkD; c.fillRect(b.x, b.y + b.h - 2, b.w, 2); c.fillStyle = T.pinkL; c.fillRect(b.x, b.y, b.w, 1); }
     if (this.beatPulse > 0.01 && !pr) { c.fillStyle = 'rgba(255,255,255,' + (0.18 * this.beatPulse).toFixed(3) + ')'; c.fillRect(b.x, b.y, b.w, b.h); }      // (it glows on the beat, like START)
-    { const tx = Math.round(b.x + (b.w - textW(b.label, 2)) / 2), ty = b.y + 3 + (pr ? 1 : 0); drawText(c, b.label, tx + 1, ty + 1, T.pinkD, 2); drawText(c, b.label, tx, ty, T.text, 2); }
+    { const tx = Math.round(b.x + (b.w - textW(b.label, 2)) / 2), ty = b.y + 3 + (pr ? 1 : 0); if (this._hq) this._hq.push([b.label, b.x + b.w / 2, ty, T.text, 2, 1, T.pinkD]); else { drawText(c, b.label, tx + 1, ty + 1, T.pinkD, 2); drawText(c, b.label, tx, ty, T.text, 2); } }
   }
 
   // on-screen controls (touch devices only): each button wears the user's neon ring (TOUCH_ART) with its symbol drawn over it in pixels, light with a dark edge so it reads on the
@@ -434,7 +446,7 @@ class Renderer {
   static get TOUCH_IDS() { return Renderer._touchIds || (Renderer._touchIds = ['left', 'right', 'slide', 'jump', 'pause', 'spin', 'flip', 'ollie']); }      // the buttons that ease in and out when pressed (one shared list)
   drawTouch(g) {
     const L = this.touchLayer();
-    if (L && g.state !== 'play' && g.state !== 'race' && this.drawMenuHi(g, L)) return;      // (the title, pause and game-over screens draw their lettering on it)
+    if (L && g.state !== 'play' && g.state !== 'race' && this.menuKind(g) && this.hiMenu(g)) return;      // (the title, pause and game-over screens letter themselves on it: drawUI, Renderer.drawMenuHi)
     if (!g.touch || (g.state !== 'play' && g.state !== 'race')) { if (L) { L.msig = null; if (L.dirty) { L.ctx.setTransform(1, 0, 0, 1, 0, 0); L.ctx.clearRect(0, 0, L.cv.width, L.cv.height); L.dirty = false; } L.t = null; L.sig = null; } return; }
     const sm = L && L.img.complete && L.img.naturalWidth ? L : null;
     if (sm) {
