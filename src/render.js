@@ -296,11 +296,45 @@ class Renderer {
   ctr(s, y, col, sc = 1, sh = C.ink) { this.txt(s, Math.round((VW - textW(s, sc)) / 2), y, col, sc, sh); }
   panel(x, y, w, h) {
     const c = this.ctx;
-    c.fillStyle = C.ink; c.fillRect(x - 1, y - 1, w + 2, h + 2);
-    c.fillStyle = C.amberD; c.fillRect(x, y, w, h);
-    c.fillStyle = C.plum; c.fillRect(x + 1, y + 1, w - 2, h - 2);
-    c.fillStyle = C.burgD; c.fillRect(x + 3, y + 3, w - 6, 1); c.fillRect(x + 3, y + h - 4, w - 6, 1); // inner rule
-    c.fillStyle = C.amber; for (const [cx, cy] of [[x, y], [x + w - 2, y], [x, y + h - 2], [x + w - 2, y + h - 2]]) c.fillRect(cx, cy, 2, 2);
+    // BERRY RUNNER 2's panel: deep night violet (a shade lighter toward the top), a neon pink frame with a soft glow line inside it, lime ticks at the corners
+    const T = Renderer.THEME;
+    c.fillStyle = T.ink; c.fillRect(x - 1, y - 1, w + 2, h + 2);
+    c.fillStyle = T.pink; c.fillRect(x, y, w, h);
+    c.fillStyle = T.night; c.fillRect(x + 1, y + 1, w - 2, h - 2);
+    c.fillStyle = T.night2; c.fillRect(x + 1, y + 1, w - 2, Math.max(2, Math.round(h * 0.34)));
+    c.fillStyle = T.violet; c.fillRect(x + 3, y + 3, w - 6, 1); c.fillRect(x + 3, y + h - 4, w - 6, 1); // inner rule
+    c.fillStyle = T.lime; for (const [cx, cy] of [[x, y], [x + w - 3, y], [x, y + h - 1], [x + w - 3, y + h - 1]]) c.fillRect(cx, cy, 3, 1);
+    for (const [cx, cy] of [[x, y], [x + w - 1, y], [x, y + h - 3], [x + w - 1, y + h - 3]]) c.fillRect(cx, cy, 1, 3);
+  }
+  // the colours of the menus (BERRY RUNNER 2): Berry's own palette (the pink of the star, the lime of the calyx, the yellow of the seeds) on a night violet
+  static get THEME() { return Renderer._theme || (Renderer._theme = { ink: '#0c0816', night: '#151022', night2: '#22163c', violet: '#4a2f86', pink: '#ff4f9e', pinkL: '#ff9ccb', pinkD: '#c2246e', lime: '#8dff1a', gold: '#ffd23a', text: '#fff3fb', dim: '#b9a2ff' }); }
+  // can the menus use the smooth layer (the canvas over the pixel one, at the screen's own resolution)? Not in VR: the HUD is a floating panel there, made from the pixel canvas alone.
+  hiMenu(g) { return !!this.touchLayer() && !g.vr; }
+  // THE MENUS IN HIGH RESOLUTION: the logo of the title screen and the headings of the pause and game-over panels are drawn as smooth lettering on the layer that carries the touch buttons
+  // during a run (it is free on these screens), at the screen's own pixel density instead of the 320 x 180 grid. Drawn once per screen (and again after a resize): a still layer costs nothing.
+  drawMenuHi(g, L) {
+    const kind = g.state === 'title' ? 'title' : g.state === 'pause' ? 'pause' : g.state === 'over' && g.overT > g.overDelay ? 'over' : '';
+    if (!kind || !this.hiMenu(g)) return false;
+    const sig = kind + '|' + L.cv.width + 'x' + L.cv.height + '|' + (this.menu3d ? 3 : 2) + (kind === 'over' && g.pk ? 'p' : '');
+    if (sig === L.msig && L.dirty) return true;
+    const c = L.ctx, k = L.cv.width / (VW + 2 * TOUCH_OUT), T = Renderer.THEME, FONT = '"Trebuchet MS", "Segoe UI", "Helvetica Neue", Arial, sans-serif';
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, L.cv.width, L.cv.height); c.setTransform(k, 0, 0, k, TOUCH_OUT * k, 0); L.dirty = true; L.msig = sig; L.t = null; L.sig = null;
+    const word = (str, x, y, px, o) => {                          // a word with a dark edge, a soft neon glow and a vertical gradient (o.align, o.italic, o.space, o.a / o.b: the gradient)
+      c.save(); c.font = (o.italic ? 'italic ' : '') + '900 ' + px + 'px ' + FONT; c.textAlign = o.align || 'left'; c.textBaseline = 'alphabetic'; if (o.space && 'letterSpacing' in c) c.letterSpacing = o.space + 'px';
+      c.lineJoin = 'round'; c.lineWidth = px * 0.2; c.strokeStyle = T.ink; c.shadowColor = o.glow || T.pink; c.shadowBlur = px * 0.22 * k; c.strokeText(str, x, y); c.shadowBlur = 0;
+      const gr = c.createLinearGradient(0, y - px * 0.8, 0, y + px * 0.1); gr.addColorStop(0, o.a); gr.addColorStop(1, o.b); c.fillStyle = gr; c.fillText(str, x, y); c.restore();
+    };
+    const star = (cx, cy, r, col) => { c.save(); c.fillStyle = col; c.strokeStyle = T.ink; c.lineWidth = r * 0.28; c.lineJoin = 'round'; c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, q = i % 2 ? r * 0.44 : r; c.lineTo(cx + Math.cos(a) * q, cy + Math.sin(a) * q); } c.closePath(); c.stroke(); c.fill(); c.restore(); };
+    if (kind === 'title') {                                        // the logo: 'Berry' with its star, a pink swoosh, 'RUNNER' in lime and a big gold 2
+      const m3 = this.menu3d, x0 = m3 ? 36 : 108, y0 = m3 ? 31 : 58, s = m3 ? 1 : 1.25;
+      c.save(); c.strokeStyle = T.pink; c.lineCap = 'round'; c.lineWidth = 1.6 * s; c.shadowColor = T.pink; c.shadowBlur = 4 * k; c.beginPath(); c.moveTo(x0 - 1 * s, y0 + 3.2 * s); c.quadraticCurveTo(x0 + 30 * s, y0 + 0.6 * s, x0 + 60 * s, y0 + 2.2 * s); c.stroke(); c.restore();
+      word('Berry', x0, y0, 19 * s, { italic: true, a: '#ffffff', b: T.pinkL });
+      star(x0 + 60.5 * s, y0 - 12 * s, 3.6 * s, T.pink);
+      word('RUNNER', x0 + 1 * s, y0 + 11.5 * s, 7.2 * s, { a: '#e9ffb0', b: T.lime, glow: T.lime, space: 1.6 * s });
+      word('2', x0 + 68 * s, y0 + 11 * s, 30 * s, { italic: true, a: '#fff6c9', b: T.gold, glow: T.gold });
+    } else if (kind === 'pause') word('PAUSED', VW / 2, 79, 15, { align: 'center', a: '#ffffff', b: T.pinkL, space: 1.2 });
+    else word('GAME OVER', VW / 2, g.pk ? 36 : 54, 15, { align: 'center', a: '#ffffff', b: T.pink, space: 1 });
+    return true;
   }
   plate(x, y, w, h, edge = C.ink) {
     const c = this.ctx;
@@ -322,9 +356,11 @@ class Renderer {
       return;
     }
     c.fillStyle = C.ink; c.fillRect(b.x - 1, b.y - 1, b.w + 2, b.h + 2);
-    c.fillStyle = pr ? C.amberD : hov ? C.amberL : C.amber; c.fillRect(b.x, b.y, b.w, b.h);
-    if (!pr) { c.fillStyle = C.amberD; c.fillRect(b.x, b.y + b.h - 2, b.w, 2); }
-    drawText(c, b.label, Math.round(b.x + (b.w - textW(b.label, 2)) / 2), b.y + 3 + (pr ? 1 : 0), C.ink, 2);
+    const T = Renderer.THEME;
+    c.fillStyle = pr ? T.pinkD : hov ? T.pinkL : T.pink; c.fillRect(b.x, b.y, b.w, b.h);
+    if (!pr) { c.fillStyle = T.pinkD; c.fillRect(b.x, b.y + b.h - 2, b.w, 2); c.fillStyle = T.pinkL; c.fillRect(b.x, b.y, b.w, 1); }
+    if (this.beatPulse > 0.01 && !pr) { c.fillStyle = 'rgba(255,255,255,' + (0.18 * this.beatPulse).toFixed(3) + ')'; c.fillRect(b.x, b.y, b.w, b.h); }      // (it glows on the beat, like START)
+    { const tx = Math.round(b.x + (b.w - textW(b.label, 2)) / 2), ty = b.y + 3 + (pr ? 1 : 0); drawText(c, b.label, tx + 1, ty + 1, T.pinkD, 2); drawText(c, b.label, tx, ty, T.text, 2); }
   }
 
   // on-screen controls (touch devices only): each button wears the user's neon ring (TOUCH_ART) with its symbol drawn over it in pixels, light with a dark edge so it reads on the
@@ -398,7 +434,8 @@ class Renderer {
   static get TOUCH_IDS() { return Renderer._touchIds || (Renderer._touchIds = ['left', 'right', 'slide', 'jump', 'pause', 'spin', 'flip', 'ollie']); }      // the buttons that ease in and out when pressed (one shared list)
   drawTouch(g) {
     const L = this.touchLayer();
-    if (!g.touch || (g.state !== 'play' && g.state !== 'race')) { if (L) { if (L.dirty) { L.ctx.setTransform(1, 0, 0, 1, 0, 0); L.ctx.clearRect(0, 0, L.cv.width, L.cv.height); L.dirty = false; } L.t = null; L.sig = null; } return; }
+    if (L && g.state !== 'play' && g.state !== 'race' && this.drawMenuHi(g, L)) return;      // (the title, pause and game-over screens draw their lettering on it)
+    if (!g.touch || (g.state !== 'play' && g.state !== 'race')) { if (L) { L.msig = null; if (L.dirty) { L.ctx.setTransform(1, 0, 0, 1, 0, 0); L.ctx.clearRect(0, 0, L.cv.width, L.cv.height); L.dirty = false; } L.t = null; L.sig = null; } return; }
     const sm = L && L.img.complete && L.img.naturalWidth ? L : null;
     if (sm) {
       const now = performance.now(); if (now - sm.syncT > 500 && g.fitTouch) { g.fitTouch(); sm.syncT = now; }                // (keeps the layer on the screen canvas, whatever the layout does)
@@ -639,9 +676,9 @@ class Renderer {
     const art1 = this.artPanel(this.titleImg, 8, 8, 124, 52, 0); if (!art1) this.panel(8, 8, 124, 52);
     if (!this.artPanel(this.controlsImg, 8, 66, 124, 40, 0.25)) this.panel(8, 66, 124, 40);
     const tx = art1 ? 34 : 14;
-    this.txt('WAYFARER', tx, 16, C.amber, 2, C.burgD);
-    this.txt('PROTOTYPE 01', tx, 38, C.tealL, 1);
-    this.txt('TAKE A FORK.', tx, 48, C.sand, 1);
+    const T = Renderer.THEME;
+    if (!this.hiMenu(g)) { this.txt('BERRY', tx, 14, T.pinkL, 2, T.ink); this.txt('RUNNER 2', tx, 28, T.lime, 2, T.ink); }      // (the smooth logo is on the layer above: Renderer.drawMenuHi; this is its pixel stand-in, in VR)
+    this.txt('TAKE A FORK.', tx, 48, T.text, 1);
     const tc = this.controlsImg && this.controlsImg.complete && this.controlsImg.naturalWidth ? C.tealL : C.bone;     // over the artwork the controls text is light teal (no white)
     if (g.vr) { /* VR: no keyboard / touch hints */ }
     else if (g.touch) { this.txt('HOLD < > STEER', 14, 74, tc, 1); this.txt('UP JUMP  DOWN SLIDE', 14, 84, tc, 1); this.txt('II PAUSE', 14, 94, tc, 1); }
@@ -655,8 +692,7 @@ class Renderer {
     if (this.menu3d) return this.drawTitle3D(g);
     this.ctx.drawImage(SPR.signForest, 14, 96); this.ctx.drawImage(SPR.signMarket, 272, 96); // the two roads, framing the panel
     this.panel(60, 30, 200, 124);
-    this.ctr('WAYFARER', 41, C.amber, 4, C.burgD);
-    this.ctr('PROTOTYPE 01', 68, C.tealL);
+    if (!this.hiMenu(g)) this.ctr('BERRY RUNNER 2', 46, Renderer.THEME.pinkL, 2, Renderer.THEME.ink);
     if (g.touch) {
       this.ctr('HOLD < > TO STEER', 84, C.bone);
       this.ctr('UP  JUMP   DOWN  SLIDE', 93, C.bone);
@@ -674,7 +710,7 @@ class Renderer {
   drawPause(g) {
     this.ctx.fillStyle = this.dither; this.ctx.fillRect(0, 0, VW, VH);
     this.panel(100, 54, 120, 70);
-    this.ctr('PAUSED', 64, C.amber, 3, C.burgD);
+    if (!this.hiMenu(g)) this.ctr('PAUSED', 64, Renderer.THEME.pinkL, 3, Renderer.THEME.ink);
     this.button(BTN.pause, g);
     if (!g.touch && !g.vr) this.ctr('P  ESC', 110, C.stoneL);
   }
@@ -683,7 +719,7 @@ class Renderer {
     this.ctx.fillStyle = this.dither; this.ctx.fillRect(0, 0, VW, VH);
     if (g.pk) {                                                                    // the 3D build: a taller panel with what this run earned and what is saved
       const pk = g.pk; this.panel(80, 14, 160, 128);
-      this.ctr('GAME OVER', 20, C.burgL, 3, C.ink);
+      if (!this.hiMenu(g)) this.ctr('GAME OVER', 20, Renderer.THEME.pink, 3, Renderer.THEME.ink);
       this.ctr('DIST ' + Math.floor(g.p.z / 10) + ' M', 44, C.bone);
       this.ctr('COINS ' + g.coins, 53, C.amberL);
       this.ctr('SCORE ' + g.score(), 62, C.bone);
@@ -693,7 +729,7 @@ class Renderer {
       this.ctr('SAVED  SHARDS ' + pk.save.shards + '  MISSIONS ' + pk.save.missions.done, 101, C.stoneL);
     } else {
     this.panel(80, 30, 160, 112);
-    this.ctr('GAME OVER', 38, C.burgL, 3, C.ink);
+    if (!this.hiMenu(g)) this.ctr('GAME OVER', 38, Renderer.THEME.pink, 3, Renderer.THEME.ink);
     this.ctr('DIST ' + Math.floor(g.p.z / 10) + ' M', 64, C.bone);
     this.ctr('COINS ' + g.coins, 74, C.amberL);
     this.ctr('SCORE ' + g.score(), 86, C.bone);

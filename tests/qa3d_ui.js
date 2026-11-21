@@ -26,7 +26,7 @@ const res = []; const T = (n, ok, i = '') => { res.push(ok); console.log((ok ? '
   });
   T('both panel images load at their embedded sizes (496 x 208 and 496 x 160)', U.loaded && U.loadedControls, JSON.stringify({ title: U.loaded, controls: U.loadedControls }));
   T('title panel: the artwork shows its dark body and glowing red line (red pixels present, dark mean)', U.withImage.title.red > 10 && U.withImage.title.mean < 90 && U.withImage.title.range > 100, JSON.stringify(U.withImage.title));
-  T('controls panel: the colourful artwork shows through the veil (many saturated pixels, far more than the plain drawn panel) and the text is legible (its colour is present in numbers)', U.withImage.controls.sat > 3 * Math.max(50, U.fallback.controls.sat) && U.withImage.controls.mean < 110 && U.withImage.controls.text > 40, JSON.stringify({ art: U.withImage.controls, drawn: U.fallback.controls }));
+  T('controls panel: the colourful artwork shows through the veil (many saturated pixels; the plain drawn panel is no longer a colourless one to compare with: since Berry Runner 2 it has its own pink and violet theme) and the text is legible (its colour is present in numbers)', U.withImage.controls.sat > 150 && U.fallback.controls.text === 0 && U.withImage.controls.mean < 110 && U.withImage.controls.text > 40, JSON.stringify({ art: U.withImage.controls, drawn: U.fallback.controls }));
   T('without the images the usual drawn panels are the fallback (no red line), and restoring them brings the artwork back', U.fallback.title.red === 0 && U.restored.title.red === U.withImage.title.red && Math.abs(U.restored.controls.mean - U.withImage.controls.mean) <= 3, JSON.stringify({ withImage: U.withImage, fallback: U.fallback, restored: U.restored }));
   // the main button (PLAY): artwork face, hover / pressed feedback, the fallback, and that RESUME / RUN AGAIN stay plain amber
   const B = await pg.evaluate(() => {
@@ -45,13 +45,13 @@ const res = []; const T = (n, ok, i = '') => { res.push(ok); console.log((ok ? '
     g.state = 'title';
     return out;
   });
-  T('START button: the artwork loads (400 x 64) and the face shows its green and pink rings (plain button has none)', B.loaded && B.idle.green > 100 && B.idle.pink > 20 && B.plain.green === 0 && B.plain.pink === 0, JSON.stringify({ loaded: B.loaded, idle: B.idle, plain: B.plain }));
+  T('START button: the artwork loads (400 x 64) and the face shows its green and pink rings (the plain button, pink since Berry Runner 2, has no green ring)', B.loaded && B.idle.green > 100 && B.idle.pink > 20 && B.plain.green === 0 && B.plain.pink > B.idle.pink, JSON.stringify({ loaded: B.loaded, idle: B.idle, plain: B.plain }));
   T('START button feedback: lighter on hover, darker when pressed', B.hover.lum > B.idle.lum + 5 && B.pressed.lum < B.idle.lum - 5, JSON.stringify({ idle: B.idle.lum, hover: B.hover.lum, pressed: B.pressed.lum }));
   T('no white on the button: no near-white pixels in its face', B.idle.white === 0, JSON.stringify({ white: B.idle.white }));
   T('no white in the controls panel either: no near-white pixels (the text is light teal, the artwork is veiled)', U.withImage.controls.white === 0, JSON.stringify({ white: U.withImage.controls.white }));
   T('the PLAY label is green (green pixels in the label area, no amber)', B.labelGreen > 20 && B.labelAmber === 0, JSON.stringify({ green: B.labelGreen, amber: B.labelAmber }));
   T('the main menu button says PLAY, and the pause button still says RESUME', B.label === 'PLAY' && B.pauseLabel === 'RESUME', JSON.stringify({ title: B.label, pause: B.pauseLabel }));
-  T('the pause button (RESUME) is still the plain amber one', B.resume[0] > 200 && B.resume[1] > 140 && B.resume[2] < 110, JSON.stringify(B.resume));
+  T('the pause button (RESUME) is still the plain one (pink since Berry Runner 2, amber before)', B.resume[0] > 200 && B.resume[1] < 130 && B.resume[2] > 120, JSON.stringify(B.resume));
   T('no JS errors', errs.length === 0, errs.slice(0, 2).join('|'));
   console.log('\n' + res.filter(Boolean).length + '/' + res.length + ' passed');
   await b.close(); srv.close(); process.exit(res.every(Boolean) ? 0 : 1);
