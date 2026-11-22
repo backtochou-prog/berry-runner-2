@@ -200,9 +200,9 @@ class Kart3D {
         const wg = (() => { const cv2 = document.createElement('canvas'); cv2.width = cv2.height = 64; const q = cv2.getContext('2d'), gr = q.createRadialGradient(32, 32, 14, 32, 32, 32); gr.addColorStop(0, 'rgba(255,60,60,0)'); gr.addColorStop(0.6, 'rgba(255,60,60,0.35)'); gr.addColorStop(1, 'rgba(255,60,60,0)'); q.fillStyle = gr; q.fillRect(0, 0, 64, 64); const t = new THREE.CanvasTexture(cv2); t.colorSpace = THREE.SRGBColorSpace; return t; })();
         const halo = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), new THREE.MeshBasicMaterial({ map: wg, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); halo.position.z = -0.01; yoke.add(halo);
         this.yoke = yoke;
-        d.scale.setScalar(k * fS); d.position.set(0, y0 + 0.07 * fS, (zs + 0.06) * fS); z.pivot.position.y = -0.5; z.legs.forEach(l => { l.rotation.x = -1.45; }); z.shadow.visible = false; }      // SEATED, legs forward
+        d.scale.setScalar(k * fS); d.position.set(0, y0 + 0.07 * fS, (zs + 0.06) * fS); z.pivot.position.y = -0.5; z.sit(); z.shadow.visible = false; }      // SEATED, legs forward
 
-      else { d.scale.setScalar(k); d.position.set(0, 0.28 - 0.95 * k * 0, 0.42); z.pivot.position.y = -0.5; z.legs.forEach(l => { l.rotation.x = -1.45; }); }
+      else { d.scale.setScalar(k); d.position.set(0, 0.28 - 0.95 * k * 0, 0.42); z.pivot.position.y = -0.5; z.sit(); }
       this.driver = z; this.car.add(d); }
     /* THE ROBOTS DRIVE THE SAME VEHICLE (the user: 'donnons aux autres joueurs, aux robots, le même véhicule que le mien, mais de couleurs différentes'): the lite hover vehicle (hull, horns, windows) with the chrome's hue turned to the robot's colour, and a small helmet of that colour above the seat */
     const glowT = (() => { const cv5 = document.createElement('canvas'); cv5.width = cv5.height = 64; const q = cv5.getContext('2d'), gr = q.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); q.fillStyle = gr; q.fillRect(0, 0, 64, 64); const t7 = new THREE.CanvasTexture(cv5); t7.colorSpace = THREE.SRGBColorSpace; return t7; })();

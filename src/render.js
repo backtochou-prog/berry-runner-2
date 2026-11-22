@@ -108,8 +108,10 @@ class Renderer {
   // HUD, touch controls and screens; also used on its own as the overlay of the 3D front end
   drawUI(g) {
     const ctx = this.ctx;
+    if (this._glassShown && !this.menuKind(g) && !g.racePaused) this.hideGlass();      // (the frosted panes of a menu go when the menu does)
+    if (this._map && this._map.on && !(g.state === 'title' && this.menu3d && !g.vr)) { this._map.cv.style.display = 'none'; this._map.on = false; g.mapOn = false; }
     if (g.state === 'race' && g.race) { this.drawRaceHud(g); this.drawTouch(g); if (g.fadeIn > 0) this.drawSceneOverlay(g); return; }
-    if (g.racePaused) { this.drawRaceHud(g); this.drawTouch(g); const hq = this.hiMenu(g) ? (this._hq = []) : null; this.drawPause(g); this._hq = null; if (hq) this.drawMenuHi(g, this.touchLayer(), hq); if (g.sfx) this.drawSoundBtn(g); return; }      // a paused race: its own HUD under the same PAUSED panel as the run's
+    if (g.racePaused) { this.drawRaceHud(g); this.drawTouch(g); const hq = this.hiMenu(g) ? (this._hq = []) : null; this._glassOn = !!(hq && this.menu3d && typeof document !== 'undefined'); this._gp = []; this._gb = []; this.drawPause(g); this._hq = null; if (hq) { this.drawMenuHi(g, this.touchLayer(), hq); this.applyGlass(); } this._glassOn = false; if (g.sfx) this.drawSoundBtn(g); return; }      // a paused race: its own HUD under the same PAUSED panel as the run's
     // (g.vr: the 3D build in immersive VR, src3d/xr3d.js. This canvas is then a floating panel, so what covers the whole screen (the flash, the portal light, the fades, the letterbox) and the
     // screen-space scooter disc are left out of it, and so are the keyboard / touch hints; nothing else changes)
     if (g.state === 'over' && g.flash > 0 && !g.vr) { ctx.globalAlpha = 0.5; ctx.fillStyle = C.burg; ctx.fillRect(0, 0, VW, VH); ctx.globalAlpha = 1; }
@@ -119,10 +121,11 @@ class Renderer {
     if (g.state === 'play' && !g.vr) this.drawScooterHint(g);
     if (g.scene || g.fadeIn > 0) this.drawSceneOverlay(g);
     const hq = this.menuKind(g) && this.hiMenu(g) ? (this._hq = []) : null;      // the menus: their panels and button faces on the pixel canvas, their lettering on the smooth layer
-    if (g.state === 'title') this.drawTitle(g);
+    this._glassOn = !!(hq && this.menu3d && typeof document !== 'undefined'); this._gp = []; this._gb = [];
+    if (g.state === 'title') { if (this._glassOn) this.drawMap(g); this.drawTitle(g); }
     else if (g.state === 'pause') this.drawPause(g);
     else if (g.state === 'over' && g.overT > g.overDelay) this.drawOver(g);
-    this._hq = null; if (hq) this.drawMenuHi(g, this.touchLayer(), hq);
+    this._hq = null; if (hq) { this.drawMenuHi(g, this.touchLayer(), hq); this.applyGlass(); } this._glassOn = false;
     if (g.sfx && g.state !== 'play' && g.state !== 'scene') this.drawSoundBtn(g);
   }
 
@@ -297,7 +300,12 @@ class Renderer {
   // (while a menu is being drawn for the smooth layer, this._hq collects its text instead: Renderer.drawMenuHi letters it in the game's font at the screen's resolution)
   txt(s, x, y, col, sc = 1, sh = C.ink) { if (this._hq) { this._hq.push([s, x, y, col, sc, 0]); return; } const o = Math.max(1, sc >> 1); drawText(this.ctx, s, x + o, y + o, sh, sc); drawText(this.ctx, s, x, y, col, sc); }
   ctr(s, y, col, sc = 1, sh = C.ink) { if (this._hq) { this._hq.push([s, VW / 2, y, col, sc, 1]); return; } this.txt(s, Math.round((VW - textW(s, sc)) / 2), y, col, sc, sh); }
-  panel(x, y, w, h) {
+  ctrAt(cx, s, y, col, sc = 1, sh = C.ink) { if (this._hq) { this._hq.push([s, cx, y, col, sc, 1]); return; } this.txt(s, Math.round(cx - textW(s, sc) / 2), y, col, sc, sh); }
+  // GLASS MENUS (the 3D build): a menu card is a pane of frosted glass over the live picture (a CSS backdrop blur on a small element placed between the 3D canvas and the pixel canvas:
+  // Renderer.applyGlass), edged and lit on the smooth layer (drawMenuHi), with the round Berry Runner 2 icon sitting on its top edge. While a glass menu is drawn panel() and button() only
+  // record where the card, the pills and the icon go (this._gp / this._gb); the pixel canvas keeps its dark veil and the artwork buttons.
+  panel(x, y, w, h, ic) {
+    if (this._glassOn) { this._gp.push([x, y, w, h, ic || 0]); this.ctx.clearRect(x, y, w, h); return; }      // (the pane is clear: the dark veil of the pause and game-over screens is not drawn over the glass)
     const c = this.ctx;
     // BERRY RUNNER 2's panel: deep night violet (a shade lighter toward the top), a neon pink frame with a soft glow line inside it, lime ticks at the corners
     const T = Renderer.THEME;
@@ -315,12 +323,107 @@ class Renderer {
   hiMenu(g) { return !!this.touchLayer() && !g.vr; }
   // THE MENUS IN HIGH RESOLUTION: the logo of the title screen and the headings of the pause and game-over panels are drawn as smooth lettering on the layer that carries the touch buttons
   // during a run (it is free on these screens), at the screen's own pixel density instead of the 320 x 180 grid. Drawn once per screen (and again after a resize): a still layer costs nothing.
+  // THE MAP BEHIND THE TITLE MENU (the 3D build): instead of the street rolling by, the zones of the game as numbered stops along one winding neon road over a night landscape (ZMAP,
+  // src/game.js), each with its colour, its little picture and its name; the chosen start wears a lime ring and the portrait of the character who runs. Drawn on its own canvas over the
+  // 3D view, at the screen's resolution, ONCE (and again when the choice, the character or the size changes): a still map costs nothing per frame. A tap on a stop: Game.pressAt.
+  drawMap(g) {
+    if (typeof ZMAP === 'undefined') return;
+    let M = this._map; const gl = document.getElementById('gl'), sc = document.getElementById('screen'); if (!gl || !sc) return;
+    if (!M) { const cv = document.createElement('canvas'); cv.id = 'map'; cv.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;display:none;pointer-events:none'; gl.parentNode.insertBefore(cv, gl.nextSibling); M = this._map = { cv, ctx: cv.getContext('2d'), on: false, sig: '', face: {} }; }
+    if (!M.on) { M.cv.style.display = 'block'; M.on = true; } g.mapOn = true;
+    const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1)), W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr), r = sc.getBoundingClientRect(), sel = g.startZone || ZMAP[0].id, who = g.r && g.r.character === 'zagla' ? 'zagla' : 'berry';
+    const A = who === 'zagla' ? (typeof ZAGLA_ASSETS !== 'undefined' ? ZAGLA_ASSETS : null) : (typeof BERRY_ASSETS !== 'undefined' ? BERRY_ASSETS : null);
+    if (A && !M.face[who]) { const im = new Image(); im.onload = () => { M.sig = ''; }; im.src = A.front; M.face[who] = im; }
+    const sig = W + 'x' + H + '|' + Math.round(r.left) + ',' + Math.round(r.top) + ',' + Math.round(r.width) + '|' + sel + '|' + who + '|' + (this._font || 0) + (M.face[who] && M.face[who].complete ? 'f' : '');
+    if (sig === M.sig) return; M.sig = sig;
+    if (M.cv.width !== W) M.cv.width = W; if (M.cv.height !== H) M.cv.height = H;
+    const c = M.ctx, T = Renderer.THEME, k = r.width / VW * dpr, FONT = 'Fredoka, "Trebuchet MS", "Segoe UI", Arial, sans-serif';
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    { const bg = c.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#0d0820'); bg.addColorStop(0.55, '#231046'); bg.addColorStop(1, '#3a1458'); c.fillStyle = bg; c.fillRect(0, 0, W, H); }
+    for (let i = 0; i < 90; i++) { const x = rnd(i, 301) * W, y = rnd(i, 302) * H * 0.8, s = (0.6 + rnd(i, 303) * 1.2) * dpr; c.fillStyle = 'rgba(255,255,255,' + (0.25 + 0.5 * rnd(i, 304)).toFixed(2) + ')'; c.fillRect(x, y, s, s); }      // the stars
+    c.setTransform(k, 0, 0, k, r.left * dpr, r.top * dpr);                                  // from here on: the 320 x 180 grid of the HUD
+    for (const q of ZMAP) { const gr = c.createRadialGradient(q.x, q.y + 4, 2, q.x, q.y + 4, 34); gr.addColorStop(0, q.c + '55'); gr.addColorStop(1, q.c + '00'); c.fillStyle = gr; c.fillRect(q.x - 36, q.y - 32, 72, 72); }      // each zone's own light on the land
+    // the road through the stops: a dark band with a glowing edge and a dashed lime line down its middle
+    const road = () => { c.beginPath(); c.moveTo(ZMAP[0].x - 26, ZMAP[0].y + 10); c.lineTo(ZMAP[0].x, ZMAP[0].y); for (let i = 1; i < ZMAP.length; i++) { const a = ZMAP[i - 1], b = ZMAP[i], mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, bend = (i % 2 ? 1 : -1) * 9, nx = -(b.y - a.y), ny = b.x - a.x, nl = Math.hypot(nx, ny) || 1; c.quadraticCurveTo(mx + nx / nl * bend, my + ny / nl * bend, b.x, b.y); } const e = ZMAP[ZMAP.length - 1]; c.quadraticCurveTo(e.x + 30, e.y - 14, e.x + 62, e.y - 6); };
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    c.save(); c.shadowColor = T.pink; c.shadowBlur = 5 * k; c.strokeStyle = 'rgba(255,79,158,0.75)'; c.lineWidth = 7.4; road(); c.stroke(); c.restore();
+    c.strokeStyle = '#150d2a'; c.lineWidth = 6; road(); c.stroke();
+    c.strokeStyle = T.lime; c.lineWidth = 0.8; c.setLineDash([2.4, 3]); road(); c.stroke(); c.setLineDash([]);
+    { const e = ZMAP[ZMAP.length - 1], fx = e.x + 62, fy = e.y - 6; c.strokeStyle = '#fff'; c.lineWidth = 0.8; c.beginPath(); c.moveTo(fx, fy); c.lineTo(fx, fy - 13); c.stroke(); for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) { c.fillStyle = (i + j) % 2 ? '#fff' : '#150d2a'; c.fillRect(fx + i * 2.6, fy - 13 + j * 2.6, 2.6, 2.6); } }      // the finish flag at the end of the road
+    const pic = (kind, x, y, col) => {                             // the little picture of a zone, in simple shapes
+      c.save(); c.translate(x, y); c.fillStyle = col; c.strokeStyle = col; c.lineWidth = 0.9;
+      if (kind === 'neon') { for (const [dx, h] of [[-5, 8], [-1.5, 12], [2, 6], [5, 10]]) c.fillRect(dx, -h, 2.6, h); c.fillStyle = T.lime; c.fillRect(-1, -9, 1, 1); c.fillRect(5.6, -7, 1, 1); }
+      else if (kind === 'beach') { c.beginPath(); c.arc(4, -8, 3, 0, Math.PI * 2); c.fillStyle = T.gold; c.fill(); c.beginPath(); for (let i = 0; i < 3; i++) { c.moveTo(-7 + i * 4.6, -1.5); c.quadraticCurveTo(-4.7 + i * 4.6, -4.5, -2.4 + i * 4.6, -1.5); } c.stroke(); }
+      else if (kind === 'house') { c.fillRect(-4.5, -6, 9, 6); c.beginPath(); c.moveTo(-6, -6); c.lineTo(0, -11); c.lineTo(6, -6); c.closePath(); c.fill(); c.fillStyle = '#150d2a'; c.fillRect(-1, -3.5, 2, 3.5); }
+      else if (kind === 'tram') { c.beginPath(); c.roundRect(-7, -8, 14, 7, 1.5); c.fill(); c.fillStyle = '#150d2a'; for (const dx of [-5, -1, 3]) c.fillRect(dx, -6.5, 2.4, 2.4); c.fillStyle = col; c.fillRect(-0.4, -11, 0.8, 3); c.fillRect(-4, -11.4, 8, 0.7); }
+      else if (kind === 'train') { c.beginPath(); c.moveTo(-7, -1); c.lineTo(-7, -6); c.quadraticCurveTo(-7, -9, -3, -9); c.lineTo(3, -9); c.quadraticCurveTo(8, -8, 8, -1); c.closePath(); c.fill(); c.fillStyle = '#150d2a'; c.fillRect(-4.5, -7.2, 3, 2.4); c.fillRect(0, -7.2, 3, 2.4); }
+      else if (kind === 'arch') { c.beginPath(); c.moveTo(-6, 0); c.lineTo(-6, -7); c.arc(0, -7, 6, Math.PI, 0); c.lineTo(6, 0); c.lineTo(3, 0); c.lineTo(3, -6); c.arc(0, -6, 3, 0, Math.PI, true); c.lineTo(-3, 0); c.closePath(); c.fill(); }
+      else if (kind === 'canal') { c.beginPath(); c.moveTo(-7, -3); c.quadraticCurveTo(0, -11, 7, -3); c.lineWidth = 1.6; c.stroke(); c.lineWidth = 0.9; c.beginPath(); for (let i = 0; i < 3; i++) { c.moveTo(-7 + i * 4.6, 0); c.quadraticCurveTo(-4.7 + i * 4.6, -2.4, -2.4 + i * 4.6, 0); } c.stroke(); }
+      else if (kind === 'car') { c.beginPath(); c.moveTo(-8, -2); c.quadraticCurveTo(-7, -5, -3, -5.5); c.quadraticCurveTo(0, -9.5, 4, -5.5); c.quadraticCurveTo(8, -5, 8, -2); c.closePath(); c.fill(); c.fillStyle = '#150d2a'; c.beginPath(); c.arc(-4.5, -1.6, 1.8, 0, Math.PI * 2); c.arc(4.5, -1.6, 1.8, 0, Math.PI * 2); c.fill(); }
+      else if (kind === 'flag') { c.fillRect(-5, -11, 0.9, 11); for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) { c.fillStyle = (i + j) % 2 ? col : '#fff'; c.fillRect(-4 + i * 2.4, -11 + j * 2.2, 2.4, 2.2); } }
+      c.restore();
+    };
+    ZMAP.forEach((q, i) => {
+      const on = q.id === sel, R0 = on ? 8.2 : 6.6;
+      pic(q.k, q.x + (i % 2 ? -15 : 15), q.y - 6, q.c);
+      c.save(); c.shadowColor = q.c; c.shadowBlur = (on ? 8 : 4) * k; c.beginPath(); c.arc(q.x, q.y, R0, 0, Math.PI * 2); const gr = c.createLinearGradient(0, q.y - R0, 0, q.y + R0); gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.35, q.c); gr.addColorStop(1, q.c); c.fillStyle = gr; c.fill(); c.restore();
+      c.beginPath(); c.arc(q.x, q.y, R0, 0, Math.PI * 2); c.strokeStyle = '#150d2a'; c.lineWidth = 1.1; c.stroke(); c.beginPath(); c.arc(q.x, q.y, R0 - 1.3, 0, Math.PI * 2); c.strokeStyle = 'rgba(255,255,255,0.75)'; c.lineWidth = 0.6; c.stroke();
+      if (on) { c.beginPath(); c.arc(q.x, q.y, R0 + 2.2, 0, Math.PI * 2); c.strokeStyle = T.lime; c.lineWidth = 1.2; c.stroke(); }
+      c.font = '700 ' + (on ? 8.4 : 7) + 'px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#150d2a'; c.fillText(String(i + 1), q.x, q.y + 0.5);
+      c.font = '600 4.6px ' + FONT; const tw = c.measureText(q.n).width + 5, ly = q.y + R0 + 2.4;      // its name on a small dark pill
+      c.beginPath(); c.roundRect(q.x - tw / 2, ly, tw, 6.4, 3.2); c.fillStyle = 'rgba(12,8,22,0.78)'; c.fill(); if (on) { c.strokeStyle = T.lime; c.lineWidth = 0.5; c.stroke(); }
+      c.fillStyle = on ? '#eaffc0' : T.text; c.textBaseline = 'middle'; c.fillText(q.n, q.x, ly + 3.4);
+    });
+    { const q = ZMAP.find(z => z.id === sel) || ZMAP[0], cx = q.x, cy = q.y - 21, R1 = 8, im = M.face[who];      // who runs, standing over the chosen stop: the character's portrait in a ring with a pointer
+      c.beginPath(); c.moveTo(cx - 3, cy + R1 - 1); c.lineTo(cx, cy + R1 + 4); c.lineTo(cx + 3, cy + R1 - 1); c.closePath(); c.fillStyle = '#fff'; c.fill();
+      c.save(); c.shadowColor = T.pink; c.shadowBlur = 6 * k; c.beginPath(); c.arc(cx, cy, R1 + 1.4, 0, Math.PI * 2); c.fillStyle = '#fff'; c.fill(); c.restore();
+      c.save(); c.beginPath(); c.arc(cx, cy, R1, 0, Math.PI * 2); c.clip(); c.fillStyle = '#151022'; c.fillRect(cx - R1, cy - R1, 2 * R1, 2 * R1);
+      if (im && im.complete && im.naturalWidth) { const sw = im.naturalWidth * 0.74, sx = (im.naturalWidth - sw) / 2, sy = im.naturalHeight * 0.03; c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; c.drawImage(im, sx, sy, sw, sw, cx - R1, cy - R1, 2 * R1, 2 * R1); } c.restore(); }
+    c.font = '700 6px ' + FONT; c.textAlign = 'right'; c.textBaseline = 'top'; if ('letterSpacing' in c) c.letterSpacing = '0.6px'; c.fillStyle = T.dim; c.fillText('CHOOSE WHERE YOU START', 312, 8); if ('letterSpacing' in c) c.letterSpacing = '0px';
+  }
+  // the lighting of the glass: a soft white sheen from the top left, a bright edge, a thin pink glow outside; the pills (pink glass) with their own highlight
+  drawGlassHi(c, k, kind) {
+    const T = Renderer.THEME, rr = (x, y, w, h, r) => { c.beginPath(); if (c.roundRect) c.roundRect(x, y, w, h, r); else c.rect(x, y, w, h); };
+    for (const [x, y, w, h] of this._gp) {
+      c.save(); rr(x, y, w, h, 7); c.shadowColor = 'rgba(255,79,158,0.45)'; c.shadowBlur = 7 * k; c.strokeStyle = 'rgba(255,255,255,0.0)'; c.lineWidth = 0.1; c.stroke(); c.restore();
+      c.save(); rr(x, y, w, h, 7); c.clip(); const gr = c.createLinearGradient(x, y, x + w * 0.9, y + h * 0.9); gr.addColorStop(0, 'rgba(255,255,255,0.20)'); gr.addColorStop(0.45, 'rgba(255,255,255,0.04)'); gr.addColorStop(1, 'rgba(255,79,158,0.10)'); c.fillStyle = gr; c.fillRect(x, y, w, h); c.restore();
+      rr(x + 0.4, y + 0.4, w - 0.8, h - 0.8, 6.6); const eg = c.createLinearGradient(x, y, x + w, y + h); eg.addColorStop(0, 'rgba(255,255,255,0.85)'); eg.addColorStop(0.5, 'rgba(255,255,255,0.25)'); eg.addColorStop(1, 'rgba(255,140,200,0.65)'); c.strokeStyle = eg; c.lineWidth = 0.9; c.stroke();
+    }
+    for (const [x, y, w, h, hov, pr] of this._gb) {
+      const r = h / 2, a = pr ? 0.62 : hov ? 0.95 : 0.82;
+      c.save(); c.shadowColor = 'rgba(255,79,158,0.7)'; c.shadowBlur = (hov ? 7 : 4) * k; rr(x, y, w, h, r); const gr = c.createLinearGradient(0, y, 0, y + h); gr.addColorStop(0, 'rgba(255,140,200,' + a + ')'); gr.addColorStop(1, 'rgba(226,40,128,' + a + ')'); c.fillStyle = gr; c.fill(); c.restore();
+      c.save(); rr(x, y, w, h, r); c.clip(); const sh = c.createLinearGradient(0, y, 0, y + h * 0.55); sh.addColorStop(0, 'rgba(255,255,255,' + (pr ? 0.15 : 0.5) + ')'); sh.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = sh; c.fillRect(x, y, w, h * 0.55); c.restore();
+      rr(x + 0.4, y + 0.4, w - 0.8, h - 0.8, r - 0.4); c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 0.8; c.stroke();
+    }
+  }
+  // the round Berry Runner 2 icon on the top edge of each card (the app's own icon, icons/icon-192.png): a glass ring, a glow, the picture cut to a circle
+  drawGlassIcons(c, k) {
+    if (!this._icon) { this._icon = new Image(); this._icon.onload = () => { this._iconOk = true; }; this._icon.src = 'icons/icon-192.png'; }
+    for (const [x, y, w, , ic] of this._gp) {
+      if (!ic) continue; const cx = x + w / 2, cy = y, r = ic;
+      c.save(); c.beginPath(); c.arc(cx, cy, r + 2.6, 0, Math.PI * 2); c.shadowColor = 'rgba(255,79,158,0.8)'; c.shadowBlur = 8 * k; const rg = c.createLinearGradient(cx - r, cy - r, cx + r, cy + r); rg.addColorStop(0, 'rgba(255,255,255,0.95)'); rg.addColorStop(1, 'rgba(255,79,158,0.9)'); c.fillStyle = rg; c.fill(); c.restore();
+      c.save(); c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.clip(); c.fillStyle = '#151022'; c.fillRect(cx - r, cy - r, 2 * r, 2 * r);
+      if (this._icon.complete && this._icon.naturalWidth) { c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; c.drawImage(this._icon, cx - r, cy - r, 2 * r, 2 * r); }
+      const sh = c.createLinearGradient(0, cy - r, 0, cy); sh.addColorStop(0, 'rgba(255,255,255,0.35)'); sh.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = sh; c.fillRect(cx - r, cy - r, 2 * r, r); c.restore();
+      c.beginPath(); c.arc(cx, cy, r + 0.5, 0, Math.PI * 2); c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = 0.7; c.stroke();
+    }
+  }
+  // the frosted panes themselves: small CSS elements between the 3D canvas and the pixel canvas, blurring what is behind them (not with ?fx=0: a plain translucent pane then)
+  applyGlass() {
+    const cv = document.getElementById('screen'); if (!cv) return;
+    const r = cv.getBoundingClientRect(), kx = r.width / VW, ky = r.height / VH, key = this._gp.join(',') + '|' + Math.round(r.left) + ',' + Math.round(r.top) + ',' + Math.round(kx * 100);
+    this._glassShown = true; if (this._glassKey === key) return; this._glassKey = key;
+    const els = this._glassEls || (this._glassEls = []), flat = /[?&]fx=0\b/.test(location.search);
+    while (els.length < this._gp.length) { const e = document.createElement('div'); e.className = 'glass'; e.style.cssText = 'position:fixed;pointer-events:none;box-sizing:border-box;background:linear-gradient(135deg,rgba(255,255,255,.13),rgba(255,255,255,.04));' + (flat ? 'background-color:rgba(28,16,52,.55);' : 'backdrop-filter:blur(14px) saturate(1.5);-webkit-backdrop-filter:blur(14px) saturate(1.5);'); cv.parentNode.insertBefore(e, cv); els.push(e); }
+    els.forEach((e, i) => { const q = this._gp[i]; if (!q) { e.style.display = 'none'; return; } e.style.display = 'block'; e.style.left = (r.left + q[0] * kx) + 'px'; e.style.top = (r.top + q[1] * ky) + 'px'; e.style.width = q[2] * kx + 'px'; e.style.height = q[3] * ky + 'px'; e.style.borderRadius = 7 * kx + 'px'; });
+  }
+  hideGlass() { this._glassShown = false; this._glassKey = null; if (this._glassEls) for (const e of this._glassEls) e.style.display = 'none'; }
   menuKind(g) { return g.state === 'title' ? 'title' : g.state === 'pause' ? 'pause' : g.state === 'over' && g.overT > g.overDelay ? 'over' : ''; }
   drawMenuHi(g, L, q) {
     const kind = this.menuKind(g);
     if (!kind || !this.hiMenu(g)) return false;
     if (this._font === undefined) { this._font = 0; try { document.fonts.load('700 12px Fredoka').then(() => { this._font = 1; }, () => {}); } catch (e) {} }      // (the game's font, assets/fonts/fredoka.woff2: the menu is lettered again once it has arrived)
-    const sig = kind + '|' + L.cv.width + 'x' + L.cv.height + '|' + (this.menu3d ? 3 : 2) + (kind === 'over' && g.pk ? 'p' : '') + this._font + '|' + (q ? q.join(';') : '');
+    const sig = kind + '|' + L.cv.width + 'x' + L.cv.height + '|' + (this.menu3d ? 3 : 2) + (kind === 'over' && g.pk ? 'p' : '') + this._font + (this._iconOk ? 'i' : '') + '|' + (q ? q.join(';') : '') + '|' + (this._glassOn ? this._gp.join(',') + '/' + this._gb.join(',') : '');
     if (sig === L.msig && L.dirty) return true;
     const c = L.ctx, k = L.cv.width / (VW + 2 * TOUCH_OUT), T = Renderer.THEME, FONT = 'Fredoka, "Trebuchet MS", "Segoe UI", "Helvetica Neue", Arial, sans-serif';
     c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, L.cv.width, L.cv.height); c.setTransform(k, 0, 0, k, TOUCH_OUT * k, 0); L.dirty = true; L.msig = sig; L.t = null; L.sig = null;
@@ -330,7 +433,11 @@ class Renderer {
       const gr = c.createLinearGradient(0, y - px * 0.8, 0, y + px * 0.1); gr.addColorStop(0, o.a); gr.addColorStop(1, o.b); c.fillStyle = gr; c.fillText(str, x, y); c.restore();
     };
     const star = (cx, cy, r, col) => { c.save(); c.fillStyle = col; c.strokeStyle = T.ink; c.lineWidth = r * 0.28; c.lineJoin = 'round'; c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, q = i % 2 ? r * 0.44 : r; c.lineTo(cx + Math.cos(a) * q, cy + Math.sin(a) * q); } c.closePath(); c.stroke(); c.fill(); c.restore(); };
-    if (kind === 'title') {                                        // the logo: 'Berry' with its star, a pink swoosh, 'RUNNER' in lime and a big gold 2
+    if (this._glassOn) this.drawGlassHi(c, k, kind);
+    if (kind === 'title' && this._glassOn) {                       // the logo under the icon, centred on the glass card
+      word('Berry', 71, 62, 17, { italic: true, align: 'center', a: '#ffffff', b: T.pinkL });
+      word('RUNNER 2', 71, 73, 7.4, { align: 'center', a: '#e9ffb0', b: T.lime, glow: T.lime, space: 1.4 });
+    } else if (kind === 'title') {                                        // the logo: 'Berry' with its star, a pink swoosh, 'RUNNER' in lime and a big gold 2
       const m3 = this.menu3d, x0 = m3 ? 36 : 108, y0 = m3 ? 31 : 58, s = m3 ? 1 : 1.25;
       c.save(); c.strokeStyle = T.pink; c.lineCap = 'round'; c.lineWidth = 1.6 * s; c.shadowColor = T.pink; c.shadowBlur = 4 * k; c.beginPath(); c.moveTo(x0 - 1 * s, y0 + 3.2 * s); c.quadraticCurveTo(x0 + 30 * s, y0 + 0.6 * s, x0 + 60 * s, y0 + 2.2 * s); c.stroke(); c.restore();
       word('Berry', x0, y0, 19 * s, { italic: true, a: '#ffffff', b: T.pinkL });
@@ -339,6 +446,7 @@ class Renderer {
       word('2', x0 + 68 * s, y0 + 11 * s, 30 * s, { italic: true, a: '#fff6c9', b: T.gold, glow: T.gold });
     } else if (kind === 'pause') word('PAUSED', VW / 2, 79, 15, { align: 'center', a: '#ffffff', b: T.pinkL, space: 1.2 });
     else word('GAME OVER', VW / 2, g.pk ? 36 : 54, 15, { align: 'center', a: '#ffffff', b: T.pink, space: 1 });
+    if (this._glassOn) this.drawGlassIcons(c, k);
     // every line of the menu (the hints, the figures of the run, the labels of the buttons): the same places and colours as the pixel lettering it replaces, in the game's font
     if (q) for (const [str, x, y, colr, sc, mid, edge] of q) {
       const px = sc >= 3 ? 17 : sc === 2 ? 12.5 : 7.4;
@@ -367,8 +475,9 @@ class Renderer {
       drawText(c, b.label, tx, ty, pr ? '#2f9a2a' : hov ? '#b4f58c' : '#5ee83c', 2);   // a green label
       return;
     }
-    c.fillStyle = C.ink; c.fillRect(b.x - 1, b.y - 1, b.w + 2, b.h + 2);
     const T = Renderer.THEME;
+    if (!this._glassOn) { c.fillStyle = C.ink; c.fillRect(b.x - 1, b.y - 1, b.w + 2, b.h + 2); }
+    if (this._glassOn) { this._gb.push([b.x, b.y, b.w, b.h, hov ? 1 : 0, pr ? 1 : 0]); if (this._hq) this._hq.push([b.label, b.x + b.w / 2, b.y + 3 + (pr ? 1 : 0), T.text, 2, 1, T.pinkD]); return; }
     c.fillStyle = pr ? T.pinkD : hov ? T.pinkL : T.pink; c.fillRect(b.x, b.y, b.w, b.h);
     if (!pr) { c.fillStyle = T.pinkD; c.fillRect(b.x, b.y + b.h - 2, b.w, 2); c.fillStyle = T.pinkL; c.fillRect(b.x, b.y, b.w, 1); }
     if (this.beatPulse > 0.01 && !pr) { c.fillStyle = 'rgba(255,255,255,' + (0.18 * this.beatPulse).toFixed(3) + ')'; c.fillRect(b.x, b.y, b.w, b.h); }      // (it glows on the beat, like START)
@@ -681,7 +790,18 @@ class Renderer {
     return true;
   }
 
+  drawTitleGlass(g) {
+    const T = Renderer.THEME, hint = (a, b, c3) => { this.ctrAt(71, a, 80, T.text, 1); this.ctrAt(71, b, 90, T.text, 1); this.ctrAt(71, c3, 100, T.dim, 1); };
+    this.panel(8, 26, 126, 116, 16);
+    if (g.vr) { /* VR: no keyboard / touch hints */ }
+    else if (g.touch) hint('HOLD < > STEER', 'UP JUMP  DOWN SLIDE', 'II PAUSE');
+    else hint('Q D / ARROWS STEER', 'Z / SPACE / UP  JUMP', 'S / DOWN SLIDE  P PAUSE');
+    this.button(BTN.title, g);
+    if (g.r && g.r.nextCharacter) this.button({ x: BTN.char.x, y: BTN.char.y, w: BTN.char.w, h: BTN.char.h, label: g.r.character === 'zagla' ? 'ZAGLA' : 'BERRY' }, g);
+    if (!g.touch && !g.vr) this.ctrAt(71, g.r && g.r.nextCharacter ? 'ENTER  PLAY     C  CHARACTER' : 'OR PRESS ENTER', 146, T.dim, 1);
+  }
   drawTitle3D(g) {
+    if (this._glassOn) return this.drawTitleGlass(g);
     // both menu panels are the user's artwork (this.titleImg / this.controlsImg, set by the 3D front end). The title text sits over the dark part of the first, to the
     // right of its light wall, with its glowing red line between 'PROTOTYPE 01' and 'TAKE A FORK.'; the controls panel is drawn under a dark veil so its text stays
     // readable. Without an image the usual bordered panel is drawn.
@@ -721,7 +841,7 @@ class Renderer {
 
   drawPause(g) {
     this.ctx.fillStyle = this.dither; this.ctx.fillRect(0, 0, VW, VH);
-    this.panel(100, 54, 120, 70);
+    if (this._glassOn) this.panel(100, 50, 120, 82, 15); else this.panel(100, 54, 120, 70);
     if (!this.hiMenu(g)) this.ctr('PAUSED', 64, Renderer.THEME.pinkL, 3, Renderer.THEME.ink);
     this.button(BTN.pause, g);
     if (!g.touch && !g.vr) this.ctr('P  ESC', 110, C.stoneL);
@@ -730,7 +850,7 @@ class Renderer {
   drawOver(g) {
     this.ctx.fillStyle = this.dither; this.ctx.fillRect(0, 0, VW, VH);
     if (g.pk) {                                                                    // the 3D build: a taller panel with what this run earned and what is saved
-      const pk = g.pk; this.panel(80, 14, 160, 128);
+      const pk = g.pk; this.panel(80, 14, 160, 128, 11);
       if (!this.hiMenu(g)) this.ctr('GAME OVER', 20, Renderer.THEME.pink, 3, Renderer.THEME.ink);
       this.ctr('DIST ' + Math.floor(g.p.z / 10) + ' M', 44, C.bone);
       this.ctr('COINS ' + g.coins, 53, C.amberL);
@@ -740,7 +860,7 @@ class Renderer {
       this.ctr('MISSIONS ' + pk.missionsDone + '  NEAR ' + pk.nearMisses + '  BONUS ' + pk.bonus, 92, C.sand);
       this.ctr('SAVED  SHARDS ' + pk.save.shards + '  MISSIONS ' + pk.save.missions.done, 101, C.stoneL);
     } else {
-    this.panel(80, 30, 160, 112);
+    this.panel(80, 30, 160, 112, 12);
     if (!this.hiMenu(g)) this.ctr('GAME OVER', 38, Renderer.THEME.pink, 3, Renderer.THEME.ink);
     this.ctr('DIST ' + Math.floor(g.p.z / 10) + ' M', 64, C.bone);
     this.ctr('COINS ' + g.coins, 74, C.amberL);

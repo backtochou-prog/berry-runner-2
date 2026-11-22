@@ -69,9 +69,9 @@ const res = []; const T = (n, ok, i = '') => { res.push(ok); console.log((ok ? '
   await p1.keyboard.press('KeyC'); await p1.waitForTimeout(400);
   const C1 = await p1.evaluate(() => ({ ch: __wf.r.character, cls: __wf.r.runner.constructor.name, saved: localStorage.getItem('wayfarer.character'), inScene: __wf.r.scene.children.includes(__wf.r.runner.group), oldGone: !__wf.r.scene.children.includes(__wf.r.characters.strawberry.group), state: __wf.state }));
   const box = await p1.evaluate(() => { const r = document.getElementById('screen').getBoundingClientRect(); return { l: r.left, t: r.top, w: r.width, h: r.height }; });
-  await p1.mouse.click(box.l + (216 + 48) / 320 * box.w, box.t + (123 + 8) / 180 * box.h); await p1.waitForTimeout(400);
+  await p1.mouse.click(box.l + (C0.btn.x + 48) / 320 * box.w, box.t + (C0.btn.y + 8) / 180 * box.h); await p1.waitForTimeout(400);
   const C2 = await p1.evaluate(() => ({ ch: __wf.r.character, cls: __wf.r.runner.constructor.name, saved: localStorage.getItem('wayfarer.character'), state: __wf.state }));
-  await p1.mouse.click(box.l + (216 + 48) / 320 * box.w, box.t + (123 + 8) / 180 * box.h); await p1.waitForTimeout(400);
+  await p1.mouse.click(box.l + (C0.btn.x + 48) / 320 * box.w, box.t + (C0.btn.y + 8) / 180 * box.h); await p1.waitForTimeout(400);
   const C3 = await p1.evaluate(() => ({ ch: __wf.r.character, state: __wf.state, saved: localStorage.getItem('wayfarer.character') }));
   await p1.reload({ timeout: 180000 }); await p1.waitForFunction(() => window.__wf, null, { timeout: 240000 }); await p1.waitForTimeout(1200);
   const C4 = await p1.evaluate(() => ({ ch: __wf.r.character, cls: __wf.r.runner.constructor.name, state: __wf.state }));

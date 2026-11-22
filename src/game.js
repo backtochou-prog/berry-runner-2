@@ -8,10 +8,24 @@ const BTN = {
   title: { x: 110, y: 123, w: 100, h: 16, label: 'START', art: 'startImg' },   // art: the name of a renderer image to draw as the button face (the 3D front end sets it; without it the button is plain amber)
   pause: { x: 110, y: 88, w: 100, h: 16, label: 'RESUME' },
   over:  { x: 100, y: 114, w: 120, h: 16, label: 'RUN AGAIN' },
-  char:  { x: 216, y: 123, w: 96, h: 16, label: 'CHARACTER' },   // the 3D front end's character button on the title screen (strawberry / Zagla; the C key too)
+  char:  { x: 23, y: 158, w: 96, h: 16, label: 'CHARACTER' },      // (under the menu's glass card since the map took the right of the title screen; it was at 216, 123)   // the 3D front end's character button on the title screen (strawberry / Zagla; the C key too)
   sound: { x: 298, y: 158, w: 18, h: 16 },     // the sound on / off icon (menu, pause and game-over screens; only when the front end has a GameAudio, g.sfx)
 };
 // touch controls (canvas pixels): hold left/right to steer, tap jump/slide/pause; each finger is tracked separately
+// THE MAP OF THE TITLE SCREEN (the 3D build; drawn by Renderer.drawMap in the menu's own style, the way a level map lies behind a game's menu): the zones of the game as stops along one
+// winding road, in the order a run meets them. A tap on a stop chooses where the next run starts (Game.startZone: the same starts as ?zone=...; the first stop is the usual start).
+// x, y: the stop's place on the 320 x 180 grid; c: its colour; k: its little picture.
+const ZMAP = [
+  { id: 'neon', n: 'NEON QUARTER', x: 158, y: 154, c: '#ff4f9e', k: 'neon' },
+  { id: 'coast', n: 'THE BEACH', x: 201, y: 160, c: '#35e6ff', k: 'beach' },
+  { id: 'city', n: 'OLD TOWN', x: 243, y: 154, c: '#ffb35c', k: 'house' },
+  { id: 'tram', n: 'SAINT-GILLES', x: 281, y: 158, c: '#ff7a5c', k: 'tram' },
+  { id: 'gare', n: 'GARE DU MIDI', x: 302, y: 106, c: '#ffd23a', k: 'train' },
+  { id: 'vic', n: 'VIC', x: 260, y: 96, c: '#c98cff', k: 'arch' },
+  { id: 'utrecht', n: 'UTRECHT', x: 214, y: 104, c: '#5cd0ff', k: 'canal' },
+  { id: 'race', n: 'RACE ZONE', x: 170, y: 88, c: '#8dff1a', k: 'car' },
+  { id: 'kart', n: 'KART CIRCUIT', x: 196, y: 44, c: '#ff4fd8', k: 'flag' },
+];
 const TOUCH = [
   { id: 'left',  x: -15,  y: 137, w: 46, h: 42 },        // (pushed out to the screen edges, away from the centre, at the user's request; a little bigger than before, to match the 42 px ring picture they wear: 46 x 42 instead of 38 x 32)
   { id: 'right', x: 41,  y: 137, w: 46, h: 42 },
@@ -175,7 +189,7 @@ class Game {
     this.world.seed = Game.runSeed();
     this.world.reset();
     this.p = { x: 0, z: 0, vx: 0, jy: 0, vy: 0, slide: 0, speed: BASE_SPEED };
-    const zm = typeof location !== 'undefined' && location.search.match(/[?&]zone=(\w+)/);                       // ?zone=vic starts the run just before that piece of the track (a segment id, or vic / utrecht / coast / neon / city as shortcuts): to test a zone without running to it
+    const zq = typeof location !== 'undefined' && location.search.match(/[?&]zone=(\w+)/), zm = zq || (this.startZone ? [0, this.startZone] : null);      /* (or the stop chosen on the title screen's map) */                       // ?zone=vic starts the run just before that piece of the track (a segment id, or vic / utrecht / coast / neon / city as shortcuts): to test a zone without running to it
     if (zm) { const id = { race: 'neonRun', kart: 'neonRun', vic: 'vicA', utrecht: 'utrechtA', coast: 'coastSunset', neon: 'neonRun', city: 'cityRun', tram: 'tramRun', gare: 'gareMidi', terrace: 'terraceRun' }[zm[1]] || zm[1]; this.world.extend(id === 'terraceRun' ? 260000 : 120000); const Z = this.world.pieces.find(q => q.id === id || (q.type === 'fork' && (q.fork.left.route === id || q.fork.right.route === id)));      /* (a fork branch: the run starts before its junction) */ if (Z) { this.p.z = Math.max(0, Z.z0 - 250); this.world.extend(this.p.z + 3000); } }
     this.raceNow = !!(zm && (zm[1] === 'race' || zm[1] === 'kart')); this.kartNow = !!(zm && zm[1] === 'kart'); this.race = null;                                  // ?zone=race: the run opens straight in the race zone (to test it)
     this.coins = 0; if (this.pk) this.pk.reset(); if (this.portal) this.portal.reset(); this.camX = 0; this.camOff = 0; this.camRel = 0; this.camErr = 0; this.prevTgt = 0; this.killer = null;
@@ -205,6 +219,10 @@ class Game {
     if (this.sfx && this.state !== 'play' && this.overButton(BTN.sound)) { this.sfx.toggle(); return 'sound'; }
     if (this.state === 'title' && this.r.nextCharacter && this.overButton(BTN.char)) { this.nextCharacter(); return 'char'; }
     const b = this.activeButton();
+    if (this.state === 'title' && this.mapOn && !(b && this.overButton(b))) {            // the map behind the menu: a tap on a stop chooses where the run starts
+      const n = ZMAP.find(q => Math.hypot(x - q.x, y - q.y) <= 11);
+      if (n) { this.startZone = n.id === ZMAP[0].id ? null : n.id; if (this.sfx) this.sfx.play('click'); return 'zone'; }
+    }
     if (b && this.overButton(b)) {
       if (this.state === 'pause') { this.resume(); return 'resume'; }
       if (this.touch) this.goFullscreen(); this.start(); return 'start';      // (a tap on START or on RETRY is a real gesture: fullscreen is asked for again if the player had left it; never without a tap)

@@ -297,6 +297,8 @@ class RunnerBerry extends RunnerSprite {
     this.apply(dt, s.time, s.state === 'title' || s.state === 'play' ? 1 : 0, s);
   }
 
+  // A SEATED POSE, held (the kart circuit's driver, src3d/kart3d.js, which never calls update): the legs forward, the shins down a little, the feet level, the hands out to the wheel
+  sit() { for (let i = 0; i < 2; i++) { const sg = i ? 1 : -1; this.leg[i].rotation.set(1.45, 0, sg * 0.06); this.calf[i].rotation.x = -0.3; this.foot[i].rotation.x = -1.15; this.arm[i].rotation.set(1.0, 0, sg * 0.2, 'ZXY'); this.fore[i].rotation.x = 0.5; } }
   static clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   // one step of a damped spring S = { a: angle, v: speed } toward `target` (stiffness K, damping D, time step h)
   static spring(S, target, K, D, h) { S.v += ((target - S.a) * K - S.v * D) * h; S.a += S.v * h; S.a = S.a < -1.2 ? -1.2 : S.a > 1.2 ? 1.2 : S.a; return S.a; }
