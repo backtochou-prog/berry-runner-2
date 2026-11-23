@@ -2,7 +2,7 @@
 // Groups placed per frame (begin -> place* -> end), so nothing is allocated while the game runs.
 // Every hazard's size comes from the gameplay collision table (OBST x U3), so what you see is what you can hit:
 //   crate   THE VORTEX (VortexArt): a 2 m disc, the user's red glass ring with her spiral that turns and pulls, and a funnel of swirls 1.05 m tall: jump over it, or it absorbs you   (was a wooden crate)
-//   barrier 2.77 m wide, 0.68 m tall          (jump over it)
+//   barrier an open hurdle (two posts, two thin rails of light), 2.77 m wide, 0.68 m tall          (jump over it)
 //   over    gate posts 3.9 m apart, banner from 1.15 m to the top beam (slide under it; the gap is 1.05 m)
 //   coin    ringed disc of radius 0.32 m, spinning and bobbing
 // The 3D build's collectibles (see src/perks.js), each with its own silhouette and colour so they are told apart at a glance and at speed, all spinning and bobbing out of sync:
@@ -25,19 +25,27 @@ class Items3D {
     })();
     const kinds = {
       crate: () => VortexArt.solid(),                                                  // the vortex: its solid parts here, the pictures and the funnel as extras (below)
-      barrier: () => {                                                                // low striped road barrier on two feet
-        const p = [Kit.box(0.2, 0.3, 0.26, -(bHW - 0.14), 0, 0, P.metal), Kit.box(0.2, 0.3, 0.26, bHW - 0.14, 0, 0, P.metal)];
-        const n = 12, w = 2 * bHW / n;
-        for (let k = 0; k < n; k++) p.push(Kit.box(w + 0.005, 0.3, 0.3, -bHW + (k + 0.5) * w, bH - 0.3, 0, k % 2 ? P.stripeCream : P.stripeRed));
+      // THE LOW BARRIER, redrawn (the user: it looked like a billboard across the road and hid what came after it): an OPEN HURDLE. Two slim dark posts on small feet and two thin rails of
+      // light between them, the top one at the full height of the obstacle (0.68 m, the height that must be jumped: what you see is still what you can hit), the lower one at half height,
+      // nothing between them: the road, the coins and the next obstacle show through. The same width (2.77 m) as before.
+      barrier: () => {
+        const p = [], px = bHW - 0.06, tube = (xc, yc, len, r, col) => Kit.cyl(r, r, len, xc, yc - len / 2, 0, col, { rz: Math.PI / 2, seg: 10, glow: true });
+        for (const sx of [-1, 1]) p.push(Kit.cyl(0.05, 0.06, bH - 0.03, sx * px, 0, 0, '#23212e', { seg: 10 }), Kit.cyl(0.13, 0.15, 0.04, sx * px, 0, 0, '#15131d', { seg: 12 }),
+          Kit.cyl(0.062, 0.062, 0.03, sx * px, bH - 0.03, 0, '#ffffff', { seg: 10, glow: true }), Kit.cyl(0.056, 0.056, 0.025, sx * px, bH * 0.5 - 0.012, 0, '#8dff1a', { seg: 10, glow: true }));
+        p.push(tube(0, bH - 0.04, 2 * px, 0.036, '#ff4f9e'), tube(0, bH - 0.04, 2 * px * 0.42, 0.04, '#ffffff'));                         // the top rail: pink light, white at its middle
+        p.push(tube(0, bH * 0.5, 2 * px, 0.02, '#8dff1a'));                                                                             // the lower rail: a thin lime line
+        for (const sx of [-1, 1]) p.push(Kit.box(0.05, 0.05, 0.02, sx * px * 0.5, bH - 0.065, 0.04, '#ffd23a', { glow: true }));          // two small markers on the top rail
         return Kit.merge(p);
       },
-      over: () => {                                                                   // gate: two posts, a top beam and a hanging banner
-        const p = [], mid = (gap + oTop) / 2 + 0.1;
-        for (const x of [-(oHW - 0.1), oHW - 0.1]) p.push(Kit.box(0.2, oTop + 0.1, 0.22, x, 0, 0, P.metal), Kit.box(0.28, 0.16, 0.3, x, 0, 0, P.woodDark));
-        p.push(Kit.box(2 * oHW + 0.3, 0.22, 0.26, 0, oTop - 0.12, 0, P.woodDark));      // top beam
-        p.push(Kit.box(2 * (oHW - 0.3), oTop - 0.15 - gap - 0.1, 0.1, 0, gap + 0.1, 0, P.burgundy));   // banner cloth: bottom edge 0.1 m above the gap line
-        p.push(Kit.box(2 * (oHW - 0.3) + 0.04, 0.12, 0.12, 0, gap + 0.05, 0, P.capBand), Kit.box(2 * (oHW - 0.3) + 0.04, 0.1, 0.12, 0, oTop - 0.25, 0, P.capBand));
-        p.push(Kit.ico(0.5, 0, mid, 0.06, P.capBand, { sz: 0.35, detail: 1 }), Kit.ico(0.26, 0, mid, 0.1, P.burgundy, { sz: 0.35 }));   // emblem
+      // THE GATE (slide under it), redrawn in the same spirit: two slim dark posts with a band of light, a top beam carrying a light bar, and instead of one closed cloth five hanging panels with
+      // gaps between them (the way ahead shows through), each ending in a lime edge at the height to slide under (1.15 m) and wearing a down chevron: go under. The same outer size as before.
+      over: () => {
+        const p = [], x0 = oHW - 0.1, n = 5, span = 2 * (oHW - 0.3), w = span / n, top = oTop - 0.15, bot = gap + 0.1, h = top - bot;
+        for (const x of [-x0, x0]) p.push(Kit.cyl(0.085, 0.1, oTop + 0.1, x, 0, 0, '#23212e', { seg: 10 }), Kit.cyl(0.17, 0.19, 0.06, x, 0, 0, '#15131d', { seg: 12 }), Kit.cyl(0.095, 0.095, 0.05, x, gap, 0, '#8dff1a', { seg: 10, glow: true }), Kit.cyl(0.095, 0.095, 0.05, x, oTop - 0.4, 0, '#ff4f9e', { seg: 10, glow: true }));
+        p.push(Kit.box(2 * oHW + 0.3, 0.2, 0.24, 0, oTop - 0.1, 0, '#23212e'), Kit.box(2 * oHW - 0.3, 0.05, 0.26, 0, oTop - 0.13, 0, '#ff4f9e', { glow: true }));      // the top beam and its light bar
+        for (let k = 0; k < n; k++) { const x = -span / 2 + (k + 0.5) * w, col = k % 2 ? '#3a2470' : '#5a2f9a';
+          p.push(Kit.box(w * 0.72, h, 0.06, x, bot, 0, col), Kit.box(w * 0.72 + 0.02, 0.07, 0.08, x, bot - 0.02, 0, '#8dff1a', { glow: true }),                       // a panel and its lime edge
+            Kit.box(w * 0.3, 0.06, 0.02, x - w * 0.1, bot + h * 0.5, 0.045, '#ffffff', { glow: true, rz: -0.6 }), Kit.box(w * 0.3, 0.06, 0.02, x + w * 0.1, bot + h * 0.5, 0.045, '#ffffff', { glow: true, rz: 0.6 })); }   // the down chevron
         return Kit.merge(p);
       },
       // the coin: concentric rings on both faces (a green core with cream and lime bands, a thick green band, a hot-pink ring, a lilac rim) on a lilac edge.
@@ -59,15 +67,15 @@ class Items3D {
     const SH = { aura: sheen('#5ff0d0', 0.2), auraRing: sheen('#8ffbe6', 0.85, true), dashRing: sheen('#ffb347', 0.8, true), wayRing: sheen('#ffe08a', 0.9, true) };
     const G = { shell: new THREE.IcosahedronGeometry(0.46, 1), ring: new THREE.TorusGeometry(0.42, 0.022, 5, 22), ringBig: new THREE.TorusGeometry(0.5, 0.026, 5, 24), ringWay: new THREE.TorusGeometry(0.48, 0.024, 5, 24) };
     const kinds2 = {
-      magnet: () => {
-        const p = [], R = 0.26;
-        for (let k = 0; k <= 6; k++) { const a = Math.PI * k / 6; p.push(Kit.box(0.13, 0.15, 0.15, Math.cos(a) * R, Math.sin(a) * R - 0.075, 0, k % 2 ? '#e0344a' : '#c42a40', { rz: a })); }             // the arch
-        for (const sx of [-1, 1]) p.push(Kit.box(0.13, 0.2, 0.15, sx * R, -0.3, 0, '#e0344a'), Kit.box(0.14, 0.12, 0.16, sx * R, -0.4, 0, '#e9eef7'), Kit.box(0.15, 0.035, 0.17, sx * R, -0.235, 0, '#35e6ff', { glow: true }));   // legs, silver tips, cyan bands
-        p.push(Kit.box(0.13, 0.1, 0.17, 0, R + 0.1, 0, '#ffd2d8', { glow: true }));                                                                                           // a highlight on the crown
+      magnet: () => {                                                                                                                                                           // a real horseshoe: a smooth red arch (a half torus), silver tips with a cyan band, a highlight along the crown. The same size as before.
+        const p = [], R = 0.26, raw = (geo, col, glow) => { const g = geo.toNonIndexed(); geo.dispose(); g.deleteAttribute('uv'); g.computeVertexNormals(); return { geo: g, color: col, glow: !!glow }; };
+        p.push(raw(new THREE.TorusGeometry(R, 0.078, 8, 18, Math.PI), '#e0344a'), raw(new THREE.TorusGeometry(R, 0.03, 5, 18, Math.PI).translate(0, 0, 0.062), '#ff8fa0', true));
+        for (const sx of [-1, 1]) p.push(Kit.cyl(0.078, 0.078, 0.2, sx * R, -0.2, 0, '#e0344a', { seg: 12 }), Kit.cyl(0.082, 0.082, 0.14, sx * R, -0.34, 0, '#e9eef7', { seg: 12 }), Kit.cyl(0.086, 0.086, 0.035, sx * R, -0.215, 0, '#35e6ff', { seg: 12, glow: true }));
         return Kit.merge(p);
       },
       shard: () => {
-        const p = [Kit.ico(0.22, 0, 0, 0, '#b86bff', { sy: 2.4, sx: 0.8, sz: 0.8, rz: 0.35, glow: true }), Kit.ico(0.12, 0, 0, 0, '#e8fbff', { sy: 2.2, sx: 0.7, sz: 0.7, rz: 0.35, glow: true }),
+        const oct = (r, x, y, z, col, o) => Kit._part(new THREE.OctahedronGeometry(r, 0), col, o, x, y, z, true);      // (a cut crystal: eight clean facets, where it was a rounded lump)
+        const p = [oct(0.24, 0, 0, 0, '#b86bff', { sy: 2.3, sx: 0.8, sz: 0.8, rz: 0.35, glow: true }), oct(0.13, 0, 0, 0, '#e8fbff', { sy: 2.2, sx: 0.7, sz: 0.7, rz: 0.35, ry: 0.78, glow: true }),
                     Kit.ico(0.09, 0.3, 0.12, 0.05, '#7cf5ff', { sy: 1.8, glow: true, rz: -0.5 }), Kit.ico(0.07, -0.28, -0.14, -0.05, '#d9baff', { sy: 1.8, glow: true, rz: 0.9 })];
         return Kit.merge(p);
       },
@@ -78,7 +86,8 @@ class Items3D {
         return Kit.merge(p);
       },
       waymark: () => {
-        const p = [Kit.ico(0.3, 0, 0, 0, '#ffc94a', { sy: 1.7, sx: 0.85, sz: 0.85, glow: true }), Kit.ico(0.16, 0, 0, 0, '#fff4c8', { sy: 1.6, sx: 0.8, sz: 0.8, glow: true }),
+        const oct = (r, col, o) => Kit._part(new THREE.OctahedronGeometry(r, 0), col, o, 0, 0, 0, true);
+        const p = [oct(0.32, '#ffc94a', { sy: 1.6, sx: 0.85, sz: 0.85, glow: true }), oct(0.17, '#fff4c8', { sy: 1.6, sx: 0.8, sz: 0.8, ry: 0.78, glow: true }),
                    Kit.box(0.5, 0.06, 0.06, 0, 0.55, 0, '#ffe08a', { glow: true }), Kit.box(0.06, 0.2, 0.06, 0, 0.45, 0, '#ffe08a', { glow: true })];                           // a little crown bar: a "marker"
         return Kit.merge(p);
       },
