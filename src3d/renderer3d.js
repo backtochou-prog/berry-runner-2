@@ -331,7 +331,7 @@ class Renderer3D {
       const dpr = window.devicePixelRatio || 1; this._ceil = Math.min(dpr, Renderer3D.PR_CEIL); this._cap = this._ceil; this._capAt = 0; this._ema = 16.7; this._slow = 0; this._fast = 0; this.adaptSteps = 0;
       if (pq) { this._adOn = false; this.renderer.setPixelRatio(Math.max(0.5, +pq[1])); this.resize(); }
     }
-    if (!this._adOn || d > 250) return;                                                             // (a pause, a hidden tab, a hitch at load: not a measure)
+    if (!this._adOn || d > 250 || this._qLow) return;                                                // (a pause, a hidden tab, a hitch at load: not a measure; the LOW setting holds the resolution)
     this._ema += (d - this._ema) * 0.08;
     if (this._ema > 28) { this._slow += d; this._fast = 0; } else if (this._ema < 17.5) { this._fast += d; this._slow = 0; } else { this._slow = 0; this._fast = 0; }
     const pr = this.renderer.getPixelRatio();
@@ -339,11 +339,28 @@ class Renderer3D {
     if (this._slow > 1500 && pr > 0.7) { const np = Math.max(0.7, pr - 0.2); this._cap = Math.min(this._cap, Math.max(np, pr - 0.05)); this._capAt = now; this.renderer.setPixelRatio(np); this.resize(); this._slow = 0; this._ema = 20; this.adaptSteps++; }
     else if (this._fast > 2000 && pr < this._cap - 0.01) { this.renderer.setPixelRatio(Math.min(this._cap, pr + 0.15)); this.resize(); this._fast = 0; }
   }
+  // THE SETTINGS (Game.applyOpt). LOW resolution: one device pixel per CSS pixel at most, held (the adaptive resolution stands aside); AUTO gives it back to the adaptive resolution, which
+  // climbs again while frames are fast. RICH COLOURS: the compositor's saturation and contrast on the finished picture (#gl.rich, index.html), unless the page was opened with ?fx=0.
+  setQuality(low) { low = !!low; if (low === !!this._qLow) return; this._qLow = low; if (this.xr && this.xr.presenting) return; if (low) { if (this.renderer.getPixelRatio() > 1) { this.renderer.setPixelRatio(1); this.resize(); } } else { this._fast = 0; this._slow = 0; if (!this._adOn) { this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)); this.resize(); } } }
+  // the kart circuit's art (src3d/kart_assets.js, 5 MB): fetched once, after the game has started (main3d.js asks for it when the browser is idle) or when the circuit is entered; a failed
+  // fetch is tried again after three seconds
+  loadKartArt() {
+    if (this._kartArt === 'loading' || typeof KART_ART !== 'undefined' || typeof document === 'undefined') return;
+    this._kartArt = 'loading'; const s = document.createElement('script'); s.src = 'src3d/kart_assets.js';
+    s.onload = () => { this._kartArt = 'ready'; }; s.onerror = () => { this._kartArt = 'failed'; s.remove(); setTimeout(() => { if (this._kartArt === 'failed') { this._kartArt = ''; this.loadKartArt(); } }, 3000); };
+    document.head.appendChild(s);
+  }
+  setRich(on) { const gl = this.gl; if (!gl || /[?&]fx=0\b/.test(location.search)) return; if (on) gl.classList.add('rich'); else gl.classList.remove('rich'); }
   draw(g) {
     this.syncDetour(g);
     this.adapt();
     if ((g.state === 'race' && g.race) || g.racePaused) {                                            // the race zone (a paused race stays on screen, still): its own scene (src3d/race3d.js) on the same renderer, under the pixel HUD
       if (!this.race3d) this.race3d = new Race3D(); if (g.state !== 'pause') this.lastT = g.time;
+      if (g.race.kart && typeof Kart3D !== 'undefined' && !this.kart3d && typeof KART_ART === 'undefined') {      // the circuit's art has not arrived yet: the race waits (Game.raceStep) under a line that says so
+        this.loadKartArt(); g.race.loading = true; this.uiCtx.clearRect(0, 0, VW, VH); this.ui.flushHud(g, null); this.uiCtx.fillStyle = 'rgba(12,8,22,0.82)'; this.uiCtx.fillRect(0, 0, VW, VH);
+        this.ui.ctr('KART CIRCUIT', 70, '#ff4fd8', 3); this.ui.ctr(this._kartArt === 'failed' ? 'NO CONNECTION: TRYING AGAIN' : 'LOADING THE CIRCUIT' + '.'.repeat(1 + Math.floor(performance.now() / 400) % 3), 100, '#fff3fb', 1); return;
+      }
+      if (g.race.loading) g.race.loading = false;
       if (g.race.kart && typeof Kart3D !== 'undefined') { if (!this.kart3d) this.kart3d = new Kart3D(this.race3d); this.kart3d.draw(g, this.renderer); } else
       this.race3d.draw(g, this.renderer); this.uiCtx.clearRect(0, 0, VW, VH); this.ui.drawUI(g); return;
     }

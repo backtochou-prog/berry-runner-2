@@ -99,7 +99,7 @@
 <script>__ld()</script>
 <script src="src3d/portal_assets.js"></script><script src="src3d/portal_art.js"></script><script src="src3d/portal3d.js"></script>
 <script>__ld()</script>
-<script src="src/race.js"></script><script src="src3d/race_assets.js"></script><script src="src3d/concept_assets.js"></script><script src="src3d/car3d.js"></script><script src="src3d/pod_car.js"></script><script src="src3d/race3d.js"></script><script src="src3d/kart_assets.js"></script><script src="src3d/hover_photos.js"></script><script src="src3d/hover_vehicle.js"></script><script src="src3d/kart3d.js"></script>
+<script src="src/race.js"></script><script src="src3d/race_assets.js"></script><script src="src3d/concept_assets.js"></script><script src="src3d/car3d.js"></script><script src="src3d/pod_car.js"></script><script src="src3d/race3d.js"></script><script>/* THE KART CIRCUIT'S ART (5 MB, a third of the game's scripts) is not loaded before the title screen any more: Renderer3D.loadKartArt fetches it in the background once the game runs, and waits for it if the circuit is entered first. Opened straight on the circuit (?zone=kart), it is loaded here as before. */ if (/[?&]zone=kart\b/.test(location.search)) document.write('<script src="src3d/kart_assets.js"><\/script>');</script><script src="src3d/hover_photos.js"></script><script src="src3d/hover_vehicle.js"></script><script src="src3d/kart3d.js"></script>
 <script>__ld()</script>
 <script src="src3d/road3d.js"></script>
 <script>__ld()</script>

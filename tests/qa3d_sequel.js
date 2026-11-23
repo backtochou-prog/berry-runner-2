@@ -1,5 +1,5 @@
 // BERRY RUNNER 2 regression test: the sequel's gameplay-feel stage. The buffered slide (asked for in the air, done on landing), the crash's hit-stop, the camera's dip on landing, Berry's
-// sprint, stumble and cheer, and the loading screen.
+// sprint, stumble and cheer, the loading screen, the HUD in high resolution, the settings, the zone ambience and the kart art loaded after the title screen.
 //
 // Run:  node tests/qa3d_sequel.js     (needs playwright-core and a Chromium: CHROMIUM=/path/to/chrome, NODE_PATH or PW_CORE as for the other tests)
 const http = require('http'), fs = require('fs'), path = require('path');
@@ -45,6 +45,42 @@ const res = []; const T = (n, ok, i = '') => { res.push(ok); console.log((ok ? '
   T('Berry reacts on the run: a broken aura is a STUMBLE, a mission a CHEER, the dash a SPRINT with a deeper lean (' + S.sprintLean + ' degrees); each goes back to the run, and the joints stay inside their ranges', S.base === 'run' && S.stumble.includes('stumble') && S.afterStumble === 'run' && S.cheer.includes('cheer') && S.afterCheer === 'run' && S.sprint.includes('sprint') && S.sprintLean > 21 && S.afterSprint === 'run' && S.limits, JSON.stringify({ stumble: S.stumble, cheer: S.cheer, sprint: S.sprint, lean: S.sprintLean, after: [S.afterStumble, S.afterCheer, S.afterSprint] }));
   T('the camera dips on a landing and comes back (' + S.dip.rest + ' > ' + S.dip.low + ' > ' + S.dip.back + ')', S.dip.low < S.dip.rest - 0.04 && S.dip.low > S.dip.rest - 0.3 && Math.abs(S.dip.back - S.dip.rest) < 0.03, JSON.stringify(S.dip));
   T('HIT-STOP: a crash holds the game for a few frames, then the fall goes on; a new run starts clean', S.crash.state === 'over' && S.crash.stop > 0.03 && S.crash.held && S.crash.released && S.crash.anim === 'trip' && S.restart === 'play:0', JSON.stringify({ crash: S.crash, restart: S.restart }));
+  // ---------------------------------------------------------------- the HUD in high resolution, the settings, the ambience, the kart art loaded late
+  const H = await pg.evaluate(async () => {
+    const g = __wf, r = g.r, ui = r.ui, out = {}, clear = () => { g.world.items = g.world.items.filter(i => i.kind === 'coin' || i.kind === 'prop'); };
+    g.state = 'title'; g.start(); for (let i = 0; i < 60; i++) { clear(); g.advance(1 / 60); } r.draw(g);
+    const hud = document.getElementById('hud'), touch = document.getElementById('touch'), L = ui.hudLayer(), ink = () => { const d = hud.getContext('2d').getImageData(0, 0, hud.width, hud.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 60) n++; return n; };
+    out.layer = { exists: !!hud, size: hud.width === touch.width && hud.height === touch.height, place: hud.style.left === touch.style.left && hud.style.top === touch.style.top, pe: getComputedStyle(hud).pointerEvents, ink: ink() };
+    const px = document.getElementById('screen').getContext('2d').getImageData(4, 4, 60, 9).data; let boneish = 0; for (let i = 0; i < px.length; i += 4) if (px[i] > 200 && px[i + 1] > 190 && px[i + 2] > 150) boneish++; out.pixelText = boneish;      // the pixel canvas no longer carries the DIST lettering (its plate is still there)
+    const d0 = L.draws; r.draw(g); r.draw(g); out.still = L.draws === d0; for (let i = 0; i < 30; i++) { clear(); g.advance(1 / 60); } r.draw(g); out.redrawn = L.draws > d0;
+    g.pause(); r.draw(g); out.pauseOpacity = +hud.style.opacity; g.resume(); r.draw(g); out.playOpacity = +hud.style.opacity;
+    g.vr = true; r.draw(g); out.vrInk = ink(); g.vr = false; r.draw(g); out.backInk = ink() > 100;
+    g.state = 'title'; r.draw(g); out.titleInk = ink();
+    // the settings
+    out.has = g.hasSettings; out.open = g.pressAt(BTN.gear.x + 4, BTN.gear.y + 4); out.isOpen = g.settingsOpen; r.draw(g); out.pane = ui._gp.length === 1 && ui._gb.length === 5;
+    const row = id => SETTINGS.rows.findIndex(q => q.id === id), tap = id => g.pressAt(SETTINGS.pill.x + 5, SETTINGS.rowY(row(id)) + 5), gl = document.getElementById('gl');
+    out.rich0 = gl.classList.contains('rich'); tap('rich'); out.rich1 = gl.classList.contains('rich'); tap('rich'); out.rich2 = gl.classList.contains('rich');
+    g.sfx.unlock(); tap('music'); out.music = { opt: g.opt.music, muted: g.sfx.music.muted, fx: g.sfx.master ? g.sfx.master.gain.value : -1 }; tap('fx'); out.fx = { opt: g.opt.fx, gain: g.sfx.master ? g.sfx.master.gain.value : -1 }; const n0 = g.sfx.active; g.sfx.play('coin'); out.fxSilent = g.sfx.active === n0;
+    out.saved = JSON.parse(localStorage.getItem('berry.settings')); tap('music'); tap('fx');
+    r.renderer.setPixelRatio(1.5); r.resize(); tap('quality'); out.low = { opt: g.opt.quality, pr: r.renderer.getPixelRatio() }; tap('quality'); out.auto = g.opt.quality;
+    out.startBlocked = (() => { const s = g.state; g.onKey({ code: 'Enter', key: 'Enter', repeat: false, preventDefault() {} }, true); return s === 'title' && g.state === 'title' && !g.settingsOpen; })();
+    g.pressAt(BTN.gear.x + 4, BTN.gear.y + 4); out.close = g.pressAt(SETTINGS.close.x + 5, SETTINGS.close.y + 5); out.closed = !g.settingsOpen;
+    out.reload = Object.assign({}, g.loadOpt());
+    // the ambience
+    g.start(); for (let i = 0; i < 200; i++) { clear(); g.advance(1 / 60); } const A = g.sfx.amb; out.amb = A && !A.dead ? { id: A.id, level: +A.level.toFixed(2), vol: A.vol > 0 } : null; out.ambOf = { run: GameAudio.ambienceOf(g) };
+    g.pause(); for (let i = 0; i < 120; i++) g.advance(1 / 60); out.ambPause = A && !A.dead ? +A.level.toFixed(2) : -1; g.resume();
+    { const st = g.bgTo, bt = g.bgT; g.bgTo = 'coastNoon'; g.bgT = 1; out.ambOf.coast = GameAudio.ambienceOf(g); g.bgTo = 'forest'; out.ambOf.forest = GameAudio.ambienceOf(g); g.bgTo = 'utrechtA'; out.ambOf.canal = GameAudio.ambienceOf(g); g.bgTo = st; g.bgT = bt; }
+    // the kart circuit's art: not there at the title screen, fetched later, and the circuit waits for it
+    out.kartEarly = typeof KART_ART; out.kartTag = !!document.querySelector('script[src="src3d/kart_assets.js"]');
+    g.state = 'title'; g.startZone = 'kart'; g.start(); for (let i = 0; i < 10; i++) g.advance(1 / 60); r.draw(g); out.kartWait = { state: g.state, loading: !!g.race.loading, asked: r._kartArt };
+    for (let i = 0; i < 300 && typeof KART_ART === 'undefined'; i++) await new Promise(q => setTimeout(q, 100));
+    out.kartArt = typeof KART_ART; r.draw(g); r.draw(g); out.kartGo = { loading: !!g.race.loading, built: !!r.kart3d, menu: !!g.race.menu }; g.race = null; g.state = 'title'; g.startZone = null;
+    return out;
+  });
+  T('THE HUD IN HIGH RESOLUTION: its own layer over the pixel canvas (same place and size as the touch layer, taking no touches), the lettering on it and no longer on the pixel canvas, redrawn only when a line changes, dimmed under a pause, cleared in VR and on the title screen', H.layer.exists && H.layer.size && H.layer.place && H.layer.pe === 'none' && H.layer.ink > 300 && H.pixelText === 0 && H.still && H.redrawn && H.pauseOpacity < 0.6 && H.playOpacity === 1 && H.vrInk === 0 && H.backInk && H.titleInk === 0, JSON.stringify({ layer: H.layer, pixelText: H.pixelText, still: H.still, redrawn: H.redrawn, op: [H.pauseOpacity, H.playOpacity], vr: H.vrInk, title: H.titleInk }));
+  T('THE SETTINGS: the gear opens a card of four rows and CLOSE; RICH COLOURS switches the picture\'s filter, MUSIC mutes the music alone, SOUND EFFECTS silences the effects alone, 3D RESOLUTION LOW holds one pixel per pixel; the choices are saved; the game does not start under the card; CLOSE closes it', H.has && H.open === 'settings' && H.isOpen && H.pane && H.rich0 && !H.rich1 && H.rich2 && H.music.opt === 0 && H.music.muted === true && H.music.fx > 0.5 && H.fx.opt === 0 && H.fx.gain === 0 && H.fxSilent && H.saved.music === 0 && H.saved.fx === 0 && H.low.opt === 1 && H.low.pr === 1 && H.auto === 0 && H.startBlocked && H.close === 'close' && H.closed && H.reload.music === 1 && H.reload.fx === 1 && H.reload.rich === 1 && H.reload.quality === 0, JSON.stringify({ open: H.open, pane: H.pane, rich: [H.rich0, H.rich1, H.rich2], music: H.music, fx: H.fx, silent: H.fxSilent, saved: H.saved, low: H.low, blocked: H.startBlocked, reload: H.reload }));
+  T('ZONE AMBIENCE: a quiet bed under the run (the neon streets hum, the coast has its surf, the forest its leaves, the canals their water), silent in a pause', !!H.amb && H.amb.id === 'hum' && H.amb.level > 0.8 && H.amb.vol && H.ambOf.run === 'hum' && H.ambOf.coast === 'coast' && H.ambOf.forest === 'leaves' && H.ambOf.canal === 'water' && H.ambPause < 0.05, JSON.stringify({ amb: H.amb, of: H.ambOf, pause: H.ambPause }));
+  T('THE KART CIRCUIT\'S ART (5 MB) is not loaded before the title screen; entering the circuit first makes the race wait under a loading line, and it starts once the art has arrived', H.kartWait.state === 'race' && (H.kartEarly === 'undefined' ? H.kartWait.loading && H.kartWait.asked === 'loading' : true) && H.kartArt === 'object' && !H.kartGo.loading && H.kartGo.built && H.kartGo.menu, JSON.stringify({ early: H.kartEarly, wait: H.kartWait, art: H.kartArt, go: H.kartGo }));
   T('no JS errors', pg.errs.length === 0, pg.errs.slice(0, 2).join('|'));
   console.log('\n' + res.filter(Boolean).length + '/' + res.length + ' passed');
   await b.close(); srv.close(); process.exit(res.every(Boolean) ? 0 : 1);

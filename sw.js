@@ -3,12 +3,12 @@
 //  - PAGES AND SCRIPTS: network first (a new version pushed to the site is played at the next start), the cache when there is no network.
 //  - MUSIC AND PICTURES: cache first (they do not change), fetched and kept the first time otherwise.
 // Bump VERSION to drop every older cache.
-const VERSION = 'berry-runner-2-v2', MEDIA = /\.(mp3|ogg|png|jpg|jpeg|webp|svg|woff2)$/i;
+const VERSION = 'berry-runner-2-v3', MEDIA = /\.(mp3|ogg|png|jpg|jpeg|webp|svg|woff2)$/i;
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
     const cache = await caches.open(VERSION), page = await fetch('./index.html', { cache: 'no-cache' }), html = await page.clone().text();
     await cache.put('./', page.clone()); await cache.put('./index.html', page);
-    const urls = [...html.matchAll(/<script src="([^"]+)"/g)].map(m => m[1]).concat(['manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'assets/fonts/fredoka.woff2', 'assets/music.mp3', 'assets/music_coast.mp3', 'assets/music_race.mp3', 'assets/music_kart.mp3']);
+    const urls = [...html.matchAll(/<script src="([^"]+)"/g)].map(m => m[1]).concat(['manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'assets/fonts/fredoka.woff2', 'src3d/kart_assets.js', 'assets/music.mp3', 'assets/music_coast.mp3', 'assets/music_race.mp3', 'assets/music_kart.mp3']);
     await Promise.all(urls.map(u => fetch(u, { cache: 'no-cache' }).then(r => r.ok && r.status === 200 ? cache.put(u, r) : null).catch(() => null)));      // (one missing file must not stop the install)
     await self.skipWaiting();
   })());
