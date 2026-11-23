@@ -51,18 +51,27 @@ No restructuring was needed to do the work below; none was done for its own sake
 - Berry's missing stretch on the beat.
 - The stale distance in the town test (the lap got longer; the game was right).
 
+**Stage 2 (HUD, settings, sound, loading, air)**
+- The run's and the race's HUD lettered in the game's font at the screen's resolution (`Renderer.flushHud`), plates in the theme.
+- A settings card (gear on the title and pause screens): music, sound effects, rich colours, 3D resolution; saved on the device.
+- MENU on the pause and game-over cards: back to the title screen without reloading the page.
+- Zone ambience under the music (surf, deep sea, canal water, leaves, neon hum).
+- The kart circuit's art (5 MB of the 16 MB) loads after the title screen.
+- The air of the zones (`src3d/air3d.js`): fireflies in the forest, dust in the ruins, petals over the market and terraces, glints in the neon streets.
+- Swipe up to jump and down to slide on touch screens.
+
 ## Not done yet (in the order I would do it)
 
-1. **In-run HUD in the new style.** Distance, coins, zone plate, missions and the race HUD still use the 320 x 180 pixel font. Needs a small always-updating smooth layer and new HUD tests.
-2. **Settings screen.** There is only a sound on/off button. Wanted: music and effects volume, the colour boost switch, a quality cap, control hints.
-3. **First-load weight.** About 16 MB of scripts (embedded pictures) load before the title screen. The loading screen makes the wait visible; the fix is to load the race, kart and far-zone art on demand.
-4. **Environments.** The zones were not changed in this stage: no new landmarks, weather or zone-specific obstacles were added.
-5. **Audio.** No new sounds this stage. Candidates: footsteps tied to the run cycle, per-zone ambience, a sound for the buffered slide and the stumble.
-6. **Difficulty curve.** Speed still ramps from 220 to 340 units/s in about 75 s and then stays flat. Obstacle density per zone was not retuned.
-7. **Character moments not yet animated:** win and lose poses for races, a collect reaction, vehicle stunt poses beyond the vehicle turning.
-8. **Hurdle height.** Still 0.68 m (hit box unchanged). Lowering it also changes the terrace, bicycle and canal-boat obstacles that share the box.
-9. **Performance on real hardware.** Frame rate was never measured on a phone or a headset; the test machine renders in software.
-10. **Real devices.** Nothing was verified on a physical phone or Quest: install, fullscreen and rotation, touch feel, blur cost, VR comfort.
+1. **First-load weight, the rest.** About 10.7 MB still loads before the title screen. Next candidates to load on demand: `canyon_assets` (0.9 MB), `race_assets` (0.7 MB), the far zones' art.
+2. **Environments.** Beyond the air particles, the zones are as they were: no new landmarks, no weather on the coast or the canals, no new zone-specific obstacles.
+3. **Difficulty curve.** Speed still ramps from 220 to 340 units/s in about 75 s and then stays flat; obstacle density per zone was not retuned. Tests pin the 340 cap, so this needs a deliberate design decision.
+4. **Character moments not yet animated:** a collect reaction, win and lose poses, stunt poses on vehicles.
+5. **Audio.** No new one-shot sounds (a stumble grunt, a cheer); no positional audio.
+6. **The settings screen** has four switches; no volume sliders, no control remapping, no language choice.
+7. **Hurdle height.** Still 0.68 m (hit box unchanged). Lowering it also changes the terrace, bicycle and canal-boat obstacles that share the box.
+8. **The 2D game** keeps its pixel HUD and has no settings, MENU buttons or map (by choice: it is the classic version).
+9. **Performance on real hardware.** Frame rate was never measured on a phone or a headset; the test machine renders in software. The HUD layer, the glass blur and the colour filter are the three things to measure first.
+10. **Real devices.** Nothing was verified on a physical phone or Quest: install, fullscreen and rotation, touch and swipe feel, VR comfort.
 
 ## How to run and test
 

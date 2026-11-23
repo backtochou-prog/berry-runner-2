@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- BERRY / ZAGLA preview: an avatar alone, to compare with docs/berry/*.png and docs/zagla/zagla-character-sheet.png (&who=zagla). ?view=turn (front / right / back / left), ?view=poses (the blueprint's animation sets, frozen), ?view=live (animated: &anim=run|idle|jump|crouch|title) -->
+<!-- BERRY / ZAGLA preview: an avatar alone, to compare with docs/berry/*.png and docs/zagla/zagla-character-sheet.png (&who=zagla). ?view=turn (front / right / back / left), ?view=poses (the blueprint's animation sets, frozen), ?view=react (the sequel's reactions: sprint, stumble, cheer), ?view=live (animated: &anim=run|idle|jump|crouch|title) -->
 <meta charset="utf-8"><title>Berry preview</title>
 <style>html,body{margin:0;background:#15141a;overflow:hidden}canvas{display:block}</style>
 <body><script src="../vendor/three.min.js"></script><script src="../src/track.js"></script><script src="../src3d/kit.js"></script><script src="../src3d/runner_sprite.js"></script><script src="../src3d/berry3d.js"></script><script src="../src3d/zagla3d.js"></script>
@@ -11,7 +11,8 @@ scene.add(new THREE.HemisphereLight(0xffffff, 0x554466, 1.5)); const sun = new T
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x24222c })); scene.add(floor);
 const st = o => Object.assign({ time: 0, runRate: 2.6, airborne: false, vy: 0, sliding: false, lean: 0, state: 'play', beat: 0 }, o);
 const SETS = { turn: [['front', { state: 'title', time: 1 }, Math.PI], ['right', { state: 'title', time: 1 }, Math.PI / 2], ['back', { state: 'title', time: 1 }, 0], ['left', { state: 'title', time: 1 }, -Math.PI / 2]],
-  poses: [['idle', { state: 'title', time: 1 }, 2.6], ['run a', { ph: 1.2 }, 1.2], ['run b', { ph: 4.3 }, 1.2], ['takeoff', { airborne: true, vy: 5, air: 0.03 }, 1.2], ['air', { airborne: true, vy: 3, air: 0.3 }, 1.2], ['fall', { airborne: true, vy: -3, air: 0.5 }, 1.2], ['land', { land: 1 }, 1.2], ['crouch', { sliding: true }, 1.2], ['turn', { lean: 1, ph: 1.2 }, 0.3], ['wave', { state: 'title', time: 3.2 }, 2.6], ['trip', { state: 'over' }, 1.2]] };
+  poses: [['idle', { state: 'title', time: 1 }, 2.6], ['run a', { ph: 1.2 }, 1.2], ['run b', { ph: 4.3 }, 1.2], ['takeoff', { airborne: true, vy: 5, air: 0.03 }, 1.2], ['air', { airborne: true, vy: 3, air: 0.3 }, 1.2], ['fall', { airborne: true, vy: -3, air: 0.5 }, 1.2], ['land', { land: 1 }, 1.2], ['crouch', { sliding: true }, 1.2], ['turn', { lean: 1, ph: 1.2 }, 0.3], ['wave', { state: 'title', time: 3.2 }, 2.6], ['trip', { state: 'over' }, 1.2]],
+  react: [['run', { ph: 1.2 }, 2.3], ['sprint', { dash: 1, ph: 1.2 }, 2.3], ['sprint side', { dash: 1, ph: 1.2 }, 1.2], ['stumble', { hurt: 0.85, ph: 1.2, time: 0.3 }, 2.3], ['stumble side', { hurt: 0.85, ph: 1.2, time: 0.3 }, 1.2], ['cheer', { cheer: 1, ph: 1.2 }, 2.6], ['cheer back', { cheer: 1, ph: 1.2 }, 0.3]] };
 const list = SETS[view] || [['live', {}, +q.get('yaw') || 0.6]], N = list.length, runners = [];
 const hw = Math.max(N * 0.75, 1.2 * W / H), hh = hw * H / W, cam = new THREE.OrthographicCamera(-hw, hw, -0.2 + 2 * hh, -0.2, 0.1, 50);
 cam.position.set(0, 0, 10);

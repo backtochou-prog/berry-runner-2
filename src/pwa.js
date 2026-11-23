@@ -28,7 +28,7 @@
   // landscape (Game.goFullscreen: the browser's fullscreen, then the orientation lock, where the browser has them: Chrome on Android does; an iPhone's Safari has no fullscreen for pages, so
   // nothing is offered there). Not during a run: two quick taps are jumps there. The line goes once the game is in fullscreen or runs as an installed app.
   const canFS = () => { const de = document.documentElement; return !!(de.requestFullscreen || de.webkitRequestFullscreen); }, inFS = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
-  const menu = () => { const g = window.__wf; return !!g && (g.state === 'title' || g.state === 'pause'); };
+  const menu = () => { const g = window.__wf; return !!g && (g.state === 'title' || g.state === 'pause') && !g.settingsOpen; };      // (not over the settings card)
   let fsTip = null, lastTap = null;
   const showFS = () => { if (!fsTip) return; fsTip.style.display = canFS() && !inFS() && !standalone() && menu() ? 'block' : 'none'; };
   const twice = (x, y) => { const now = performance.now(), hit = lastTap && now - lastTap.t < 450 && Math.hypot(x - lastTap.x, y - lastTap.y) < 60; lastTap = hit ? null : { t: now, x, y }; return !!hit; };

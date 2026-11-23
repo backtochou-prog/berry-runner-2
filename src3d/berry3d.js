@@ -278,8 +278,8 @@ class RunnerBerry extends RunnerSprite {
       this.anim = 'stumble'; run(0.75, BERRY_RIG.LEAN); const h = s.hurt; t.sx -= 0.5 * h; t.nx += 0.3 * h; t.hz += 0.14 * h * Math.sin(s.time * 26); t.alz = t.arz = 0.2 + 1.1 * h; t.el += -0.9 * h; t.er += -0.9 * h; t.kl += 0.35 * h; t.kr += 0.35 * h; steer(1); rate = 34; }
     else if (s.dash > 0.25) {                                         // SPRINT (the dash): a deeper lean, a longer stride, the arms swept back
       this.anim = 'sprint'; const d = Math.min(1, s.dash); run(1.25, BERRY_RIG.LEAN * (1 + 0.55 * d)); t.alx = -1.15 * d + t.alx * (1 - d); t.arx = -1.15 * d + t.arx * (1 - d); t.alz = t.arz = 0.2 + 0.25 * d; t.el = 0.25 * d + t.el * (1 - d); t.er = 0.25 * d + t.er * (1 - d); steer(1); rate = 34; }
-    else if (s.cheer > 0) {                                           // CHEER (a mission, a waymark, a clean sequence): both arms thrown up and out on the run, the head back
-      this.anim = 'cheer'; run(1, BERRY_RIG.LEAN * 0.6); const c = Math.min(1, s.cheer * 2.5); t.alz = t.arz = 0.2 + 1.3 * c; t.alx = t.alx * (1 - c) + 0.5 * c; t.arx = t.arx * (1 - c) + 0.5 * c; t.el = t.el * (1 - c) + 1.7 * c; t.er = t.er * (1 - c) + 1.7 * c; t.nx -= 0.25 * c; steer(1); rate = 34; }
+    else if (s.cheer > 0) {                                           // CHEER (a mission, a waymark, a clean sequence): both arms thrown wide on the run, the head back
+      this.anim = 'cheer'; run(1, BERRY_RIG.LEAN * 0.6); const c = Math.min(1, s.cheer * 2.5); t.alz = t.arz = 0.2 + 1.32 * c; t.alx = t.alx * (1 - c) - 0.25 * c; t.arx = t.arx * (1 - c) - 0.25 * c; t.el = t.el * (1 - c) + 0.12 * c; t.er = t.er * (1 - c) + 0.12 * c; t.nx -= 0.3 * c; t.sx += 0.12 * c; t.sz += 0.1 * c * Math.sin(s.time * 9);      /* (the arms wide like wings, as high as the shoulders allow, the chest out, a little roll) */ steer(1); rate = 34; }
     else { this.anim = 'run'; run(1, BERRY_RIG.LEAN); steer(1); rate = 34; }
     if (s.beat > 0 && s.state !== 'over' && !s.sliding) t.lift += (s.state === 'title' ? 0.08 : 0.03) * s.beat;        // it bounces on the beat of the music
     return rate;

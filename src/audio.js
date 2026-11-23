@@ -38,7 +38,7 @@ class GameAudio {
     this.unlocked = true;
     try {
       const AC = window.AudioContext || window.webkitAudioContext; this.ctx = new AC();
-      this.master = this.ctx.createGain(); this.master.gain.value = this.muted ? 0 : 0.8;
+      this.master = this.ctx.createGain(); this.master.gain.value = this.muted || this.fxOff ? 0 : 0.8;
       this.bus = this.ctx.createDynamicsCompressor(); this.bus.threshold.value = -14; this.bus.ratio.value = 6;                // keeps a pile-up of effects from clipping
       this.master.connect(this.bus); this.bus.connect(this.ctx.destination);
     } catch (e) { this.ctx = null; }
@@ -74,11 +74,14 @@ class GameAudio {
   // ---- mute
   setMuted(m) {
     this.muted = !!m; try { localStorage.setItem('wayfarer.sound', this.muted ? '0' : '1'); } catch (e) {}
-    if (this.master) this.master.gain.value = this.muted ? 0 : 0.8;
-    if (this.music) this.music.muted = this.muted;
-    if (this.musicCoast) this.musicCoast.muted = this.muted;
-    if (this.musicRace) this.musicRace.muted = this.muted;
+    this.applyMix();
     if (!this.muted) { this.unlock(); this.play('click'); }
+  }
+  // the settings' two switches (Game.applyOpt): the music and the sound effects apart. The sound icon still silences both at once.
+  setMix(musicOn, fxOn) { this.musicOff = !musicOn; this.fxOff = !fxOn; this.applyMix(); }
+  applyMix() {
+    if (this.master) this.master.gain.value = this.muted || this.fxOff ? 0 : 0.8;
+    for (const m of [this.music, this.musicCoast, this.musicRace]) if (m) m.muted = this.muted || !!this.musicOff;
   }
   toggle() { this.setMuted(!this.muted); }
 
@@ -109,7 +112,7 @@ class GameAudio {
     set(e.sh.frequency, f0 * 5 + 120 * boost); set(e.shG.gain, 0.012 + 0.03 * k + 0.03 * boost);                             // the shimmer rises with the speed
     set(e.lp.frequency, 300 + 800 * k + 400 * boost); set(e.nG.gain, 0.006 + 0.012 * k + 0.05 * k * k * k);      // the air rushing past rises with the cube of the speed
     e.want = { f0: +f0.toFixed(1), cut: +(300 + 800 * k + 400 * boost).toFixed(0), k: +k.toFixed(3), level: +level.toFixed(2) };
-    set(e.gain.gain, (hurt ? 0.02 : 0.028 + 0.022 * k) * level * (this.muted ? 0 : 1) * this.musicVol);        // `level`: loud at the start (the launch), a faint hum for the rest of the race
+    set(e.gain.gain, (hurt ? 0.02 : 0.028 + 0.022 * k) * level * (this.muted || this.fxOff ? 0 : 1) * this.musicVol);        // `level`: loud at the start (the launch), a faint hum for the rest of the race
   }
 
 
@@ -127,8 +130,40 @@ class GameAudio {
   }
 
   // ---- once per frame: beat clock, music volume by state, state-change sounds
+  // ZONE AMBIENCE: under the music, a quiet bed of air for the place the runner is in, made from one loop of filtered noise (three audio nodes for the whole game, created once): the surf
+  // on the coast (a low wash that swells and falls), the deep rumble of the sea over the aquarium tunnel, lapping water on the canals, leaves in the forest and the ruins, the hum of the
+  // neon streets, the open air of the other streets. It follows the zone ahead (g.bgTo) with a slow crossfade, is silent in the menus, the cutscenes, the races and a pause, and it is a
+  // sound effect: the SOUND EFFECTS setting and the sound icon silence it.
+  static get AMBIENCE() { return GameAudio._amb || (GameAudio._amb = {
+    coast: { type: 'lowpass', f: 560, q: 0.5, g: 0.075, lfo: 0.13 }, aqua: { type: 'lowpass', f: 170, q: 1.1, g: 0.1, lfo: 0.07 }, water: { type: 'lowpass', f: 820, q: 0.5, g: 0.035, lfo: 0.21 },
+    leaves: { type: 'bandpass', f: 2700, q: 0.7, g: 0.028, lfo: 0.31 }, hum: { type: 'lowpass', f: 130, q: 1.4, g: 0.04, lfo: 0.05 }, street: { type: 'lowpass', f: 320, q: 0.4, g: 0.018, lfo: 0.09 } }); }
+  static ambienceOf(g) {
+    if (g.state !== 'play') return null;
+    const id = g.bgT > 0.4 ? g.bgTo || '' : (g.world && g.world.baseBiome) || '', w = g.world;
+    if (w && w.seaDepth && w.seaDepth(g.p.z) * 0.1 > 2.5) return 'aqua';
+    return /^coastAqua/.test(id) ? 'aqua' : /^coast/.test(id) ? 'coast' : /^utrecht/.test(id) ? 'water' : /^(forest|ruins)/.test(id) ? 'leaves' : /^(neon|artcity|canyon)/.test(id) ? 'hum' : 'street';
+  }
+  ambience(g, dt) {
+    if (!this.ctx) return;
+    let A = this.amb;
+    if (!A) {
+      try {
+        const n = Math.floor(this.ctx.sampleRate * 2), buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate), d = buf.getChannelData(0); let seed = 12345, last = 0;
+        for (let i = 0; i < n; i++) { seed = (seed * 16807) % 2147483647; const wn = seed / 1073741823.5 - 1; last = (last + 0.04 * wn) / 1.04; d[i] = wn * 0.55 + last * 6; }      // white noise with some low rumble under it
+        const src = this.ctx.createBufferSource(); src.buffer = buf; src.loop = true; const filter = this.ctx.createBiquadFilter(), gain = this.ctx.createGain(); gain.gain.value = 0;
+        src.connect(filter); filter.connect(gain); gain.connect(this.master); src.start();
+        A = this.amb = { src, filter, gain, id: '', level: 0 };
+      } catch (e) { this.amb = { dead: true }; return; }
+    }
+    if (A.dead) return;
+    const want = GameAudio.ambienceOf(g), k = Math.min(1, dt * 1.6);
+    if (want !== A.id) { A.level += (0 - A.level) * Math.min(1, dt * 3); if (A.level < 0.02 || !A.id) { A.id = want || ''; if (want) { const P = GameAudio.AMBIENCE[want]; A.filter.type = P.type; A.filter.frequency.value = P.f; A.filter.Q.value = P.q; } } }      // out, change the colour of the noise, in again
+    else A.level += ((want ? 1 : 0) - A.level) * k;
+    const P = A.id ? GameAudio.AMBIENCE[A.id] : null, vol = P ? P.g * A.level * (0.62 + 0.38 * Math.sin(this.clock * P.lfo * 6.2832)) : 0;
+    A.gain.gain.value = this.muted || this.fxOff ? 0 : vol; A.vol = vol;
+  }
   tick(g, dt) {
-    this.update(g, dt);
+    this.update(g, dt); this.ambience(g, dt);
     const s = g.state, a = this.music;
     if (a) {
       const level = { title: 0.55, play: 0.85, race: 0.9, pause: 0.22, over: 0.3, scene: 0 }, target = s in level ? level[s] : 0.5;                       // the station scene has no music: only the place and its people (see voices.station)
@@ -176,7 +211,7 @@ class GameAudio {
   // ---- effects. `name` as listed in GameAudio.voices; `arg` = voice-specific (a delay in seconds for most)
   play(name, arg) {
     this.counts[name] = (this.counts[name] || 0) + 1;
-    if (!this.ctx || this.muted || !GameAudio.voices[name]) return;
+    if (!this.ctx || this.muted || this.fxOff || !GameAudio.voices[name]) return;
     this.resume();
     const t = this.ctx.currentTime + 0.01; let a = arg;
     if (name === 'coin') { const now = this.ctx.currentTime; this.streak = now - this.streakT < 0.9 ? Math.min(this.streak + 1, 9) : 0; this.streakT = now; a = this.streak; }
