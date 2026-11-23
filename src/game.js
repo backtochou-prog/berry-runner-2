@@ -305,7 +305,8 @@ class Game {
   goFullscreen() { // hides the browser bars and asks for landscape (Android Chrome); silently ignored elsewhere
     try {
       const de = document.documentElement;
-      if (!document.fullscreenElement && de.requestFullscreen) de.requestFullscreen().then(() => { try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) {} }).catch(() => {});
+      const req = de.requestFullscreen || de.webkitRequestFullscreen;      // (older Chrome and Samsung Internet: the prefixed call)
+      if (!document.fullscreenElement && !document.webkitFullscreenElement && req) { const p = req.call(de, { navigationUI: 'hide' }), turn = () => { try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) {} }; if (p && p.then) p.then(turn).catch(() => {}); else setTimeout(turn, 150); }
     } catch (e) {}
   }
 

@@ -22,5 +22,22 @@
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; show(); });
   window.addEventListener('appinstalled', () => { deferred = null; show(); });
   window.addEventListener('DOMContentLoaded', () => { make(); show(); setInterval(show, 500); });
-  window.__pwa = { get canInstall() { return !!deferred; }, standalone };
+  // TAP TWICE FOR FULL SCREEN: on the title screen (and on the pause screen) a short line says so, and two quick taps anywhere (or a double click) put the game in fullscreen and turn it to
+  // landscape (Game.goFullscreen: the browser's fullscreen, then the orientation lock, where the browser has them: Chrome on Android does; an iPhone's Safari has no fullscreen for pages, so
+  // nothing is offered there). Not during a run: two quick taps are jumps there. The line goes once the game is in fullscreen or runs as an installed app.
+  const canFS = () => { const de = document.documentElement; return !!(de.requestFullscreen || de.webkitRequestFullscreen); }, inFS = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const menu = () => { const g = window.__wf; return !!g && (g.state === 'title' || g.state === 'pause'); };
+  let fsTip = null, lastTap = null;
+  const showFS = () => { if (!fsTip) return; fsTip.style.display = canFS() && !inFS() && !standalone() && menu() ? 'block' : 'none'; };
+  const twice = (x, y) => { const now = performance.now(), hit = lastTap && now - lastTap.t < 450 && Math.hypot(x - lastTap.x, y - lastTap.y) < 60; lastTap = hit ? null : { t: now, x, y }; return !!hit; };
+  const goFS = () => { const g = window.__wf; if (!g || !menu() || inFS() || !canFS()) return false; if (g.goFullscreen) g.goFullscreen(); setTimeout(showFS, 400); return true; };
+  window.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') return; if (twice(e.clientX, e.clientY)) goFS(); }, true);
+  window.addEventListener('dblclick', () => { goFS(); }, true);
+  for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, showFS);
+  window.addEventListener('DOMContentLoaded', () => {
+    fsTip = document.createElement('div'); fsTip.id = 'fs-tip'; fsTip.textContent = 'TAP TWICE FOR FULL SCREEN';
+    fsTip.style.cssText = 'position:fixed;left:50%;top:calc(8px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:20;display:none;pointer-events:none;white-space:nowrap;padding:7px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.55);background:linear-gradient(135deg,rgba(255,255,255,.22),rgba(255,79,158,.18));backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#fff;font:700 12px/1 Fredoka,system-ui,sans-serif;letter-spacing:.1em;text-shadow:0 1px 2px #151022;box-shadow:0 0 12px rgba(255,79,158,.45)';
+    document.body.appendChild(fsTip); showFS(); setInterval(showFS, 500);
+  });
+  window.__pwa = { get canInstall() { return !!deferred; }, standalone, goFS };
 })();
