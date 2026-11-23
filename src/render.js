@@ -892,16 +892,17 @@ class Renderer {
 
   drawPause(g) {
     this.ctx.fillStyle = this.dither; this.ctx.fillRect(0, 0, VW, VH);
-    if (this._glassOn) this.panel(100, 50, 120, 82, 15); else this.panel(100, 54, 120, 70);
+    const more = !!g.hasSettings;                                                  // (the 3D build: a MENU pill under RESUME, on a taller card)
+    if (this._glassOn) this.panel(100, 50, 120, more ? 96 : 82, 15); else this.panel(100, 54, 120, more ? 88 : 70);
     if (!this.hiMenu(g)) this.ctr('PAUSED', 64, Renderer.THEME.pinkL, 3, Renderer.THEME.ink);
-    this.button(BTN.pause, g);
-    if (!g.touch && !g.vr) this.ctr('P  ESC', 110, C.stoneL);
+    this.button(BTN.pause, g); if (more) this.button(BTN.menuP, g);
+    if (!g.touch && !g.vr) this.ctr('P  ESC', more ? 128 : 110, C.stoneL);
   }
 
   drawOver(g) {
     this.ctx.fillStyle = this.dither; this.ctx.fillRect(0, 0, VW, VH);
     if (g.pk) {                                                                    // the 3D build: a taller panel with what this run earned and what is saved
-      const pk = g.pk; this.panel(80, 14, 160, 128, 11);
+      const pk = g.pk; this.panel(80, 14, 160, g.hasSettings ? 140 : 128, 11);
       if (!this.hiMenu(g)) this.ctr('GAME OVER', 20, Renderer.THEME.pink, 3, Renderer.THEME.ink);
       this.ctr('DIST ' + Math.floor(g.p.z / 10) + ' M', 44, C.bone);
       this.ctr('COINS ' + g.coins, 53, C.amberL);
@@ -919,6 +920,7 @@ class Renderer {
     this.ctr('BEST ' + g.best, 96, C.tealL);
     }
     this.button(BTN.over, g);
-    if (!g.touch && !g.vr) this.ctr('SPACE  ENTER  R', 133, C.sand);
+    if (g.hasSettings && g.pk) { this.button(BTN.menuO, g); if (!g.touch && !g.vr) this.ctr('ENTER  RUN AGAIN     ESC  MENU', 158, C.sand); }
+    else if (!g.touch && !g.vr) this.ctr('SPACE  ENTER  R', 133, C.sand);
   }
 }

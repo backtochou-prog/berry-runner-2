@@ -132,7 +132,7 @@ class Renderer3D {
     this.layouts = {}; for (const id of Object.keys(envs)) if (envs[id].layout) this.layouts[id] = new Map();   // per biome: slot -> cached placements
     this.slotCache = []; for (let i = 0; i < 20; i++) this.slotCache.push({ i: -1e9, ver: -1, mid: null, a: null, b: null });   // track bands per scenery slot (middle / start / end), reused until the track changes
     this.items = new Items3D(this.scene);
-    this.fx = new Fx3D(this.scene);
+    this.fx = new Fx3D(this.scene); this.air = typeof Air3D !== 'undefined' ? new Air3D(this.scene) : null;      // (the air of each zone: fireflies, motes, petals, glints)
     this.saucers = typeof Saucer3D !== 'undefined' ? new Saucer3D(this.scene) : null;                  // the flying saucers of the coastal town (one per landing pad in view)
     this.characters = {}; this.character = Renderer3D.savedCharacter(); this.runner = this.makeRunner(this.character);   // the playable characters: BERRY (RunnerBerry: the rigged 3D body of the user's character sheet) and Zagla (a 3D body)
     this.scene.add(this.runner.group); this.scene.add(this.runner.shadow);
@@ -523,7 +523,7 @@ class Renderer3D {
           else { o.rotation.z = on ? 0.12 * Math.sin(bb * Math.PI + ph) * (0.5 + pu) : 0; o.scale.y = 1 + 0.12 * pu; } } } }
     for (const name in this.props) { const pool = this.props[name]; for (let n = this.propUsed[name]; n < pool.length; n++) pool[n].visible = false; }
     this.items.end(g.time);
-    this.fx.update(g.time, rz, Lref);
+    this.fx.update(g.time, rz, Lref); if (this.air) this.air.update(g, dt, rz);
     { // the station's train: standing at the platform from afar (the boarding door at the door point), the leaves slide in the cutscene, it pulls out in the 'depart' phase
       if (!this.garePiece || w.pieces.indexOf(this.garePiece) < 0) this.garePiece = w.pieces.find(q => q.type === 'seg' && q.seg.scene) || null;
       const GP = this.garePiece, T = this.train, C = this.crowd, inView = !!GP && p.z > GP.z0 - 2400 && p.z < GP.z1 + 200;

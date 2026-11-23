@@ -9,6 +9,8 @@ const BTN = {
   pause: { x: 110, y: 88, w: 100, h: 16, label: 'RESUME' },
   over:  { x: 100, y: 114, w: 120, h: 16, label: 'RUN AGAIN' },
   char:  { x: 23, y: 158, w: 96, h: 16, label: 'CHARACTER' },      // (under the menu's glass card since the map took the right of the title screen; it was at 216, 123)   // the 3D front end's character button on the title screen (strawberry / Zagla; the C key too)
+  menuP: { x: 110, y: 108, w: 100, h: 14, label: 'MENU', dim: true },   // back to the title screen (its map, the character, the settings) from the pause card ...
+  menuO: { x: 120, y: 133, w: 80, h: 14, label: 'MENU', dim: true },    // ... and from the game-over card (the 3D build)
   gear:  { x: 276, y: 158, w: 18, h: 16 },     // the settings icon, beside the sound icon (title and pause screens of the 3D build)
   sound: { x: 298, y: 158, w: 18, h: 16 },     // the sound on / off icon (menu, pause and game-over screens; only when the front end has a GameAudio, g.sfx)
 };
@@ -120,6 +122,13 @@ class Game {
       const was = this.mouse.down; this.mouse.down = false; at(e);
       if (was) this.pressAt(this.mouse.x, this.mouse.y);
     });
+    // SWIPES (touch, during a run): a quick stroke UP anywhere outside the buttons is a jump, a stroke DOWN a slide, for a thumb that would rather not look for a button. One action per
+    // stroke (26 px or more, mostly vertical, within 0.45 s of the touch); a touch that began on a button or on a scooter's indicator is never a swipe; steering stays on its two buttons.
+    const swipes = {};
+    addEventListener('pointerdown', e => { if (e.pointerType !== 'touch' || this.state !== 'play') return; at(e); if (zone() || overHint()) return; swipes[e.pointerId] = { x: e.clientX, y: e.clientY, t: performance.now(), done: false }; });
+    addEventListener('pointermove', e => { const s = swipes[e.pointerId]; if (!s || s.done || this.state !== 'play') return; const dx = e.clientX - s.x, dy = e.clientY - s.y;
+      if (Math.abs(dy) >= 26 && Math.abs(dy) > Math.abs(dx) * 1.3 && performance.now() - s.t < 450) { s.done = true; this.swiped = dy < 0 ? 'jump' : 'slide'; if (dy < 0) this.jump(); else this.slideKey(); } });
+    for (const ev of ['pointerup', 'pointercancel']) addEventListener(ev, e => { delete swipes[e.pointerId]; });
     // THE LAYOUT FOLLOWS THE SCREEN, whatever changes it: a resize, a turn of the phone (some browsers report the new size only after the turn has finished: fitted again a little later), the
     // browser's bars sliding in and out (visualViewport), entering or leaving fullscreen, and a page restored from the back / forward cache
     const refit = () => { this.fit(); if (this.r && this.r.resize) this.r.resize(); };
@@ -233,6 +242,7 @@ class Game {
     if (this.hasSettings && (this.state === 'title' || this.state === 'pause') && this.overButton(BTN.gear)) { this.settingsOpen = true; if (this.sfx) this.sfx.play('click'); return 'settings'; }
     if (this.sfx && this.state !== 'play' && this.overButton(BTN.sound)) { this.sfx.toggle(); return 'sound'; }
     if (this.state === 'title' && this.r.nextCharacter && this.overButton(BTN.char)) { this.nextCharacter(); return 'char'; }
+    if (this.hasSettings && ((this.state === 'pause' && this.overButton(BTN.menuP)) || (this.state === 'over' && this.overT > this.overDelay && this.overButton(BTN.menuO)))) { this.toTitle(); return 'menu'; }
     const b = this.activeButton();
     if (this.state === 'title' && this.mapOn && !(b && this.overButton(b))) {            // the map behind the menu: a tap on a stop chooses where the run starts
       const n = ZMAP.find(q => Math.hypot(x - q.x, y - q.y) <= 11);
@@ -248,6 +258,9 @@ class Game {
 
   start() { this.resetRun(); this.state = 'play'; this.resumeTo = null; this.settingsOpen = false; this.emit('start'); }
   // the settings: read once from the device, written at every change, applied to the sound and to the 3D renderer (a front end without them, the 2D game, has no settings)
+  // BACK TO THE TITLE SCREEN (the MENU pills of the pause and game-over cards; Esc on the game-over card): the run is given up and a fresh one stands ready behind the menu. Before, the only
+  // way back to the map and the character choice was to reload the page.
+  toTitle() { if (this.state !== 'pause' && this.state !== 'over') return false; this.race = null; this.resumeTo = null; this.settingsOpen = false; this.keys = {}; this.releaseTouch(); if (this.pk) this.pk.onDie(); this.resetRun(); this.state = 'title'; if (this.sfx) this.sfx.play('click'); return true; }
   get hasSettings() { return !!(this.r && this.r.setQuality); }
   loadOpt() { const o = Object.assign({}, SETTINGS.defaults); try { const s = JSON.parse(localStorage.getItem('berry.settings') || '{}'); for (const r of SETTINGS.rows) if (Number.isInteger(s[r.id]) && s[r.id] >= 0 && s[r.id] < r.vals.length) o[r.id] = s[r.id]; } catch (e) {} return o; }
   saveOpt() { try { localStorage.setItem('berry.settings', JSON.stringify(this.opt)); } catch (e) {} }
@@ -353,6 +366,7 @@ class Game {
     const s = this.state;
     if (s === 'title' && (c === 'Enter' || c === 'Space')) this.start();
     else if (s === 'over' && this.overT > this.overDelay && (c === 'Enter' || c === 'Space' || c === 'KeyR')) this.start();
+    else if (s === 'over' && this.overT > this.overDelay && c === 'Escape' && this.hasSettings) this.toTitle();
     else if (s === 'play') {
       if (c === 'Space' || U) this.jump();
       else if (D) this.slideKey();
