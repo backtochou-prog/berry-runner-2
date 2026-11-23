@@ -38,7 +38,7 @@
   for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, showFS);
   window.addEventListener('DOMContentLoaded', () => {
     fsTip = document.createElement('div'); fsTip.id = 'fs-tip'; fsTip.textContent = 'TAP TWICE FOR FULL SCREEN';
-    fsTip.style.cssText = 'position:fixed;left:50%;top:calc(8px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:20;display:none;pointer-events:none;white-space:nowrap;padding:7px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.55);background:linear-gradient(135deg,rgba(255,255,255,.22),rgba(255,79,158,.18));backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#fff;font:700 12px/1 Fredoka,system-ui,sans-serif;letter-spacing:.1em;text-shadow:0 1px 2px #151022;box-shadow:0 0 12px rgba(255,79,158,.45)';
+    fsTip.style.cssText = 'position:fixed;left:50%;top:calc(8px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:20;display:none;pointer-events:none;white-space:nowrap;padding:7px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.55);background:linear-gradient(135deg,rgba(60,40,96,.86),rgba(120,40,96,.86));color:#fff;font:700 12px/1 Fredoka,system-ui,sans-serif;letter-spacing:.1em;text-shadow:0 1px 2px #151022;box-shadow:0 0 12px rgba(255,79,158,.45)';
     document.body.appendChild(fsTip); showFS(); setInterval(showFS, 500);
   });
   window.__pwa = { get canInstall() { return !!deferred; }, standalone, goFS };

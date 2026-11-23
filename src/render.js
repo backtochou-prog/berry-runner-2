@@ -461,11 +461,25 @@ class Renderer {
   // the frosted panes themselves: small CSS elements between the 3D canvas and the pixel canvas, blurring what is behind them (not with ?fx=0: a plain translucent pane then)
   applyGlass() {
     const cv = document.getElementById('screen'); if (!cv) return;
-    const r = cv.getBoundingClientRect(), kx = r.width / VW, ky = r.height / VH, key = this._gp.join(',') + '|' + Math.round(r.left) + ',' + Math.round(r.top) + ',' + Math.round(kx * 100);
-    this._glassShown = true; if (this._glassKey === key) return; this._glassKey = key;
-    const els = this._glassEls || (this._glassEls = []), flat = /[?&]fx=0\b/.test(location.search);
-    while (els.length < this._gp.length) { const e = document.createElement('div'); e.className = 'glass'; e.style.cssText = 'position:fixed;pointer-events:none;box-sizing:border-box;background:linear-gradient(135deg,rgba(255,255,255,.13),rgba(255,255,255,.04));' + (flat ? 'background-color:rgba(28,16,52,.55);' : 'backdrop-filter:blur(14px) saturate(1.5);-webkit-backdrop-filter:blur(14px) saturate(1.5);'); cv.parentNode.insertBefore(e, cv); els.push(e); }
-    els.forEach((e, i) => { const q = this._gp[i]; if (!q) { e.style.display = 'none'; return; } e.style.display = 'block'; e.style.left = (r.left + q[0] * kx) + 'px'; e.style.top = (r.top + q[1] * ky) + 'px'; e.style.width = q[2] * kx + 'px'; e.style.height = q[3] * ky + 'px'; e.style.borderRadius = 7 * kx + 'px'; });
+    const r = cv.getBoundingClientRect(), kx = r.width / VW, ky = r.height / VH, key = this._gp.join(',') + '|' + Math.round(r.left) + ',' + Math.round(r.top) + ',' + Math.round(kx * 100) + (Renderer.flatGlass() ? 'f' : '');
+    if (!this._glassShown) this.watchGlass(); this._glassShown = true; if (this._glassKey === key) return; this._glassKey = key;
+    const els = this._glassEls || (this._glassEls = []);
+    while (els.length < this._gp.length) { const e = document.createElement('div'); e.className = 'glass'; cv.parentNode.insertBefore(e, cv); els.push(e); }
+    const base = 'position:fixed;pointer-events:none;box-sizing:border-box;background:linear-gradient(135deg,rgba(255,255,255,.13),rgba(255,255,255,.04));' + (Renderer.flatGlass() ? 'background-color:rgba(28,16,52,.6);' : 'backdrop-filter:blur(14px) saturate(1.5);-webkit-backdrop-filter:blur(14px) saturate(1.5);');
+    els.forEach((e, i) => { const q = this._gp[i]; if (!q) { e.style.display = 'none'; return; } e.style.cssText = base + 'display:block;left:' + (r.left + q[0] * kx) + 'px;top:' + (r.top + q[1] * ky) + 'px;width:' + q[2] * kx + 'px;height:' + q[3] * ky + 'px;border-radius:' + 7 * kx + 'px'; });
+  }
+  // IS THE GLASS FROSTED (a backdrop blur) OR FLAT (a plain translucent pane)? It STARTS FLAT, and the blur is switched on only once the device has shown it is fast: each time a glass menu
+  // appears while the panes are flat, the frames of the next 0.8 s are counted (Renderer.watchGlass), and at 25 a second or more the panes are frosted; the 1.5 s after that are counted
+  // too, and under six frames a second the panes go back to flat for the rest of the visit. Flat always with ?fx=0. (Why it must start flat: a software-rendered browser stops drawing
+  // altogether under a backdrop blur, and taking the blur away afterwards does not bring it back; the automated tests found that. A slow phone would at least stutter.)
+  static flatGlass() { if (Renderer._noBlur === undefined) { Renderer._noBlur = /[?&]fx=0\b/.test(location.search); try { if (sessionStorage.getItem('berry.glass') === 'flat') Renderer._noBlur = true; } catch (e) {} } return Renderer._noBlur || !Renderer._blur; }
+  watchGlass() {
+    Renderer.flatGlass(); if (Renderer._noBlur || this._glassOk || this._glassWatch) return;
+    let n = 0; this._glassWatch = true; const tick = () => { n++; if (this._glassWatch) requestAnimationFrame(tick); }; requestAnimationFrame(tick);
+    const restyle = () => { this._glassKey = null; };                                       // (the panes are styled again at the next frame: Renderer.applyGlass)
+    if (!Renderer._blur) setTimeout(() => { this._glassWatch = false; if (!this._glassShown || n < 20) return; Renderer._blur = true; restyle(); this.watchGlass(); }, 800);      // fast enough: frost the panes, then watch them
+    else setTimeout(() => { this._glassWatch = false; if (!this._glassShown) return; if (n >= 9) { this._glassOk = true; return; }
+      Renderer._blur = false; Renderer._noBlur = true; try { sessionStorage.setItem('berry.glass', 'flat'); } catch (e) {} restyle(); if (this._glassEls) for (const e of this._glassEls) { e.style.backdropFilter = 'none'; e.style.webkitBackdropFilter = 'none'; e.style.backgroundColor = 'rgba(28,16,52,.6)'; } }, 1500);
   }
   hideGlass() { this._glassShown = false; this._glassKey = null; if (this._glassEls) for (const e of this._glassEls) e.style.display = 'none'; }
   menuKind(g) { return g.state === 'title' ? 'title' : g.state === 'pause' ? 'pause' : g.state === 'over' && g.overT > g.overDelay ? 'over' : ''; }
@@ -845,7 +859,7 @@ class Renderer {
     const T = Renderer.THEME, hint = (a, b, c3) => { this.ctrAt(71, a, 80, T.text, 1); this.ctrAt(71, b, 90, T.text, 1); this.ctrAt(71, c3, 100, T.dim, 1); };
     this.panel(8, 26, 126, 116, 16);
     if (g.vr) { /* VR: no keyboard / touch hints */ }
-    else if (g.touch) hint('HOLD < > STEER', 'UP JUMP  DOWN SLIDE', 'II PAUSE');
+    else if (g.touch) hint('HOLD < > STEER', 'TAP OR SWIPE  JUMP  SLIDE', 'II PAUSE');
     else hint('Q D / ARROWS STEER', 'Z / SPACE / UP  JUMP', 'S / DOWN SLIDE  P PAUSE');
     this.button(BTN.title, g);
     if (g.r && g.r.nextCharacter) this.button({ x: BTN.char.x, y: BTN.char.y, w: BTN.char.w, h: BTN.char.h, label: g.r.character === 'zagla' ? 'ZAGLA' : 'BERRY' }, g);

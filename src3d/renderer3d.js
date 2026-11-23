@@ -618,7 +618,10 @@ class Renderer3D {
     if (this.sunGlow.visible) { this.sunGlow.position.copy(this.sunDisc.position); this.sunGlow.position.z += 0.5; this.sunGlow.lookAt(eye); }
 
     this.pickHint(g);
-    this.renderer.render(this.scene, this.camera);
+    // BEHIND THE MAP of the title screen nothing of the 3D picture is seen (the map covers the whole screen): after the first frames (they warm the shaders up for the run) it is no longer
+    // drawn there. A still title screen then costs the graphics chip nothing, and the frosted panes over it have nothing to blur again. Not in VR (no map there).
+    this._covered = g.state === 'title' && g.mapOn && !(this.xr && this.xr.presenting) ? (this._covered || 0) + 1 : 0;
+    if (this._covered <= 30) this.renderer.render(this.scene, this.camera);
     this.uiCtx.clearRect(0, 0, VW, VH);
     this.ui.drawUI(g);
   }
