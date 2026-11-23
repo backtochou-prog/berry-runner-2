@@ -26,48 +26,93 @@
   /* the suggestion to turn an upright phone (the 2D page's own line, style.css): under the screen canvas, never over the game or its controls, and it takes no touches */
   #rotate { display: none; position: fixed; left: 0; right: 0; text-align: center; pointer-events: none; font: 11px/1 monospace; letter-spacing: 1px; color: #e8a33d; text-shadow: 0 1px 0 #1b1420, 0 0 6px #1b1420; }
   @media (orientation: portrait) and (pointer: coarse) { #rotate { display: block; } }
+  #boot { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: radial-gradient(ellipse at 50% 40%, #2a1250 0%, #151022 70%); transition: opacity .45s ease; }
+  #boot.done { opacity: 0; pointer-events: none; }
+  #boot .b-logo { display: flex; flex-direction: column; align-items: center; line-height: 1; font-family: Fredoka, "Trebuchet MS", "Segoe UI", sans-serif; }
+  #boot .b-logo i { font-size: min(15vw, 64px); font-weight: 700; color: #fff; text-shadow: 0 0 18px #ff4f9e, 0 3px 0 #c2246e; }
+  #boot .b-logo b { margin-top: 6px; font-size: min(5vw, 22px); letter-spacing: .28em; color: #8dff1a; text-shadow: 0 0 10px rgba(141,255,26,.6); }
+  #boot .b-bar { width: min(60vw, 260px); height: 8px; border-radius: 999px; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.35); overflow: hidden; }
+  #boot-fill { width: 0; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #ff4f9e, #ffd23a); transition: width .2s ease; }
+  #boot .b-tip { font: 600 11px/1 Fredoka, system-ui, sans-serif; letter-spacing: .22em; color: #b9a2ff; }
 </style>
 </head>
 <body>
+<!-- THE LOADING SCREEN: the game's scripts are large (the pictures are embedded in them); while they arrive the logo and a bar that fills as each group of scripts has run -->
+<div id="boot"><div class="b-logo"><i>Berry</i><b>RUNNER 2</b></div><div class="b-bar"><div id="boot-fill"></div></div><div class="b-tip" id="boot-tip">LOADING</div></div>
+<script>(function () { var n = 0, f = document.getElementById('boot-fill'); window.__ld = function () { n++; var t = 34; if (f) f.style.width = Math.min(100, Math.round(n / t * 100)) + '%'; }; })();</script>
 <canvas id="gl"></canvas>
 <script>if (!/[?&]fx=0\b/.test(location.search)) document.getElementById("gl").className = "rich";</script>
 <canvas id="screen" width="320" height="180"></canvas>
 <canvas id="touch" width="640" height="360"></canvas>
 <div id="rotate" data-follow="1">ROTATE YOUR PHONE FOR A BIGGER VIEW</div>
 <script src="vendor/three.min.js"></script>
+<script>__ld()</script>
 <script src="src/biomes.js"></script>
+<script>__ld()</script>
 <script src="src/track.js"></script>
+<script>__ld()</script>
 <script src="src/world.js"></script>
+<script>__ld()</script>
 <script src="src/sprites.js"></script>
+<script>__ld()</script>
 <script src="src/font.js"></script>
+<script>__ld()</script>
 <script src="src/touch_assets.js"></script><script src="src/ring_assets.js"></script><script src="src/scooter_art.js"></script><script src="src/mag_pad_art.js"></script><script src="src/render.js"></script>
+<script>__ld()</script>
 <script src="src/perks.js"></script>
+<script>__ld()</script>
 <script src="src/game.js"></script>
+<script>__ld()</script>
 <script src="src/audio.js"></script>
+<script>__ld()</script>
 <script src="src3d/kit.js"></script>
+<script>__ld()</script>
 <script src="src3d/stretch.js"></script>
+<script>__ld()</script>
 <script src="src3d/tree_assets.js"></script><script src="src3d/flower_assets.js"></script><script src="src3d/tree_sprite.js"></script>
+<script>__ld()</script>
 <script src="src3d/env_city.js"></script>
+<script>__ld()</script>
 <script src="src3d/env_forest.js"></script>
+<script>__ld()</script>
 <script src="src3d/env_market.js"></script><script src="src3d/env_terrace.js"></script>
+<script>__ld()</script>
 <script src="src3d/neon_assets.js"></script><script src="src3d/neon_assets2.js"></script><script src="src3d/neon_assets3.js"></script><script src="src3d/neon_assets4.js"></script><script src="src3d/neon_tunnel_art.js"></script><script src="src3d/neon_quarter_art.js"></script><script src="src3d/neon_art.js"></script>
+<script>__ld()</script>
 <script src="src3d/neon_shops.js"></script><script src="src3d/env_neon.js"></script><script src="src3d/art_assets.js"></script><script src="src3d/env_artcity.js"></script><script src="src3d/canyon_assets.js"></script><script src="src3d/metro_art.js"></script><script src="src3d/skyline_art.js"></script><script src="src3d/env_canyon.js"></script><script src="src3d/coast_assets.js"></script><script src="src3d/coast_art.js"></script><script src="src3d/parasol_assets.js"></script><script src="src3d/island_parasol_assets.js"></script><script src="src3d/parasol_art.js"></script><script src="src3d/env_coast.js"></script><script src="src3d/island_assets.js"></script><script src="src3d/island_art.js"></script><script src="src3d/island_places.js"></script><script src="src3d/env_town.js"></script><script src="src3d/env_aqua.js"></script><script src="src3d/env_ruins.js"></script>
+<script>__ld()</script>
 <script src="src3d/board_assets.js"></script><script src="src3d/board_art.js"></script><script src="src3d/blossom_assets.js"></script><script src="src3d/blossom_sprite.js"></script><script src="src3d/tram_art.js"></script><script src="src3d/env_tram.js"></script><script src="src3d/env_gare.js"></script><script src="src3d/train3d.js"></script><script src="src3d/crowd3d.js"></script><script src="src3d/utrecht_assets.js"></script><script src="src3d/utrecht_art.js"></script><script src="src3d/env_utrecht.js"></script><script src="src3d/env_vic.js"></script><script src="src3d/bike_lane.js"></script>
+<script>__ld()</script>
 <script src="src3d/signs3d.js"></script>
+<script>__ld()</script>
 <script src="src3d/berry_assets.js"></script>
+<script>__ld()</script>
 <script src="src3d/ui_assets.js"></script>
+<script>__ld()</script>
 <script src="src3d/runner_sprite.js"></script><script src="src3d/berry3d.js"></script><script src="src3d/zagla_assets.js"></script><script src="src3d/zagla3d.js"></script>
+<script>__ld()</script>
 <script src="src3d/tunnel_ring_assets.js"></script><script src="src3d/tunnel_ring_art.js"></script><script src="src3d/vic_art.js"></script><script src="src3d/sphere_assets.js"></script><script src="src3d/sphere_art.js"></script><script src="src3d/vortex_assets.js"></script><script src="src3d/vortex_art.js"></script><script src="src3d/items3d.js"></script>
+<script>__ld()</script>
 <script src="src3d/fx3d.js"></script>
+<script>__ld()</script>
 <script src="src3d/perks3d.js"></script>
+<script>__ld()</script>
 <script src="src3d/portal_assets.js"></script><script src="src3d/portal_art.js"></script><script src="src3d/portal3d.js"></script>
+<script>__ld()</script>
 <script src="src/race.js"></script><script src="src3d/race_assets.js"></script><script src="src3d/concept_assets.js"></script><script src="src3d/car3d.js"></script><script src="src3d/pod_car.js"></script><script src="src3d/race3d.js"></script><script src="src3d/kart_assets.js"></script><script src="src3d/hover_photos.js"></script><script src="src3d/hover_vehicle.js"></script><script src="src3d/kart3d.js"></script>
+<script>__ld()</script>
 <script src="src3d/road3d.js"></script>
+<script>__ld()</script>
 <script src="src3d/saucer3d.js"></script>
+<script>__ld()</script>
 <script src="src3d/renderer3d.js"></script>
+<script>__ld()</script>
 <script src="src3d/xr_input.js"></script><script src="src3d/xr_hud.js"></script><script src="src3d/xr_comfort.js"></script><script src="src3d/xr3d.js"></script>
+<script>__ld()</script>
 <script src="src3d/music_beats.js"></script><script src="src3d/music_beats_coast.js"></script><script src="src3d/music_beats_race.js"></script><script src="src3d/music_beats_kart.js"></script>
+<script>__ld()</script>
 <script src="src3d/main3d.js"></script>
+<script>__ld()</script>
 <script src="src/pwa.js"></script>
 </body>
 </html>

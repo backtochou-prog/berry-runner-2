@@ -547,7 +547,8 @@ class Renderer3D {
     let cornerA = 0; if (g.corner && !(this.xr && this.xr.presenting)) { const k = Math.min(1, g.corner.t / NEON_CORNER.T); cornerA = Math.PI / 2 * k * k * (3 - 2 * k); }   // THE NEON CORNER's pivot angle
     this.runner.group.rotation.y = Math.PI * mm + this.heading * (1 - mm) + cornerA + (trk && trk.kind === 'spin' ? Math.PI * 2 * ease(trkA) : 0);
     this.runner.update(dt, { beat: pulse, faceYaw: Math.atan2(this.cam.x - relX, this.cam.z) + cornerA, time: g.time, runRate: 2.3 + p.speed / 340 * 1.1, airborne: p.jy > 0, vy: p.vy, sliding: p.slide > 0,
-                             absorb: absK, absorbSpin: absSpin, lean: Math.max(-1, Math.min(1, p.vx / STEER)), state: g.state, scooter: this.riding(g) || !!g.surf, vehicle: g.surf ? 'surf' : g.vehicle || 'scooter', kmh: Math.round(p.speed * 0.36 * (g.pk ? g.pk.speedMul : 1)), flip: trk && trk.kind === 'flip' ? Math.PI * 2 * ease(trkA) : 0, pop: g.olliePop ? Math.sin(Math.min(1, g.olliePop.t / 0.45) * Math.PI) : 0 });      // (on the e-bike the flip is a tailwhip: RunnerSprite turns its frame about the vertical)
+                             absorb: absK, absorbSpin: absSpin, lean: Math.max(-1, Math.min(1, p.vx / STEER)), state: g.state, scooter: this.riding(g) || !!g.surf, vehicle: g.surf ? 'surf' : g.vehicle || 'scooter', kmh: Math.round(p.speed * 0.36 * (g.pk ? g.pk.speedMul : 1)), flip: trk && trk.kind === 'flip' ? Math.PI * 2 * ease(trkA) : 0, pop: g.olliePop ? Math.sin(Math.min(1, g.olliePop.t / 0.45) * Math.PI) : 0,
+                             dash: g.pk ? g.pk.dashK : 0, hurt: g.state === 'play' ? Math.max(0, 1 - (g.time - (g.hurtT === undefined ? -9 : g.hurtT)) / 0.5) : 0, cheer: g.state === 'play' ? Math.max(0, 1 - (g.time - (g.cheerT === undefined ? -9 : g.cheerT)) / 0.7) : 0 });      // (on the e-bike the flip is a tailwhip: RunnerSprite turns its frame about the vertical)
     
 
     // ---- camera: chase (behind and above, centred on the 2D camera) blended with the menu showcase orbit; looks down the active route
@@ -579,6 +580,8 @@ class Renderer3D {
       const ca = Math.cos(cornerA), sa = Math.sin(cornerA);
       for (const v of [this.cam, this.look]) { const dx = v.x - relX, dz = v.z; v.x = relX + dx * ca + dz * sa; v.z = -dx * sa + dz * ca; }
     }
+    // THE LANDING: the camera dips a hand's width as the runner touches down and comes back (not in VR, not in the rider's eyes)
+    { const air = p.jy > 0; if (this._wasAir && !air && g.state === 'play') this.landK = 1; this._wasAir = air; this.landK = (this.landK || 0) * Math.exp(-11 * dt); if (this.landK > 0.01 && !XRP && this.fpK < 0.5) { this.cam.y -= 0.13 * this.landK; this.look.y -= 0.05 * this.landK; } }
     if (g.shake > 0 && !XRP) { this.cam.x += Math.sin(g.time * 90) * g.shake * 0.5; this.cam.y += Math.cos(g.time * 70) * g.shake * 0.3; }
     // the cutscene's camera: from the road side, beside the runner (run, board, doors), then following the train out (depart); it eases in and out of the chase camera
     this.sceneK += ((SC ? 1 : 0) - this.sceneK) * (1 - Math.exp(-(SC ? 2.2 : 5) * dt));

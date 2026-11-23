@@ -195,7 +195,7 @@ class Game {
     this.coins = 0; if (this.pk) this.pk.reset(); if (this.portal) this.portal.reset(); this.camX = 0; this.camOff = 0; this.camRel = 0; this.camErr = 0; this.prevTgt = 0; this.killer = null;
     const ahead0 = this.world.playerBand(300, 0);                                    // the atmosphere starts as the road ahead looks (the run opens in the neon quarter), not eased in from the base look
     this.bgT = ahead0.t; this.bgTo = ahead0.t > 0 ? ahead0.to : this.world.baseBiome; this.canopy = 0; this.flash = 0; this.overT = 0; this.overDelay = 0.5;
-    this.fx = []; this.dustT = 0; this.shake = 0; this.coinPulse = 0; this.jumpBuf = 0;
+    this.fx = []; this.dustT = 0; this.shake = 0; this.coinPulse = 0; this.jumpBuf = 0; this.slideBuf = 0; this.hurtT = this.cheerT = -9; this.hitStop = 0;
     this.scene = null; this.fadeIn = 0;                                                 // no cutscene running, no fade
     this.corner = null; this.detour = null; if (this.world) { this.world.extraLift = null; this.world.extraOff = null; this.world.noRoad = null; }                                             // the neon corner: no pivot running, not in the picture district (NEON_CORNER)
     this.onLane = false; this.trick = null; this.olliePop = null; this.ollieDone = false; this.combo = 0; this.stuntPts = 0; this.camFP = false; this.riding = false; this.vehicle = 'scooter';
@@ -240,7 +240,8 @@ class Game {
   // the optional scooter: get on (the nearest parked scooter / station that has an indicator right now; it is taken) or off again, whenever the player wants. Drawing only: the rules are the same.
   mount() { const h = this.scooterHint; if (this.state !== 'play' || this.riding || this.surf || !h) return false; this.riding = true; this.vehicle = h.kind || 'scooter'; this.scooterHint = null; if (this.r.onScooter) this.r.onScooter(this, h); this.emit('mount'); if (this.touch && navigator.vibrate) navigator.vibrate(30); return true; }
   dismount() { if (this.state !== 'play' || !this.riding) return false; this.riding = false; this.emit('dismount'); return true; }
-  emit(name, arg) { if (this.sfx) this.sfx.play(name, arg); if (this.onEmit) this.onEmit(name, arg); }       // a sound effect, if the front end has sound; onEmit: an optional listener (the VR controllers' haptics)
+  // (two of the events are also moments the runner's body shows: a broken aura is a stumble, a mission, a waymark or a clean sequence a cheer: Renderer3D hands their age to the runner)
+  emit(name, arg) { if (name === 'auraBreak') this.hurtT = this.time; else if (name === 'mission' || name === 'waymark' || name === 'combo') this.cheerT = this.time; if (this.sfx) this.sfx.play(name, arg); if (this.onEmit) this.onEmit(name, arg); }       // a sound effect, if the front end has sound; onEmit: an optional listener (the VR controllers' haptics)
 
   // which road the player would take if the junction line were crossed now: an explicit left/right input given inside the
   // prompt window wins (lane steering outside the window never counts); with no input, the side the runner is on, else right
@@ -254,7 +255,8 @@ class Game {
 
   jump() { this.jumpBuf = 0.12; } // buffered: a press just before landing still jumps
   // down: fast-fall in the air; on the ground start a slide (a slide already under way is not restarted, so taps can't chain)
-  slideKey() { const p = this.p; if (p.jy > 0) p.vy = -600; else if (p.slide <= 0) { p.slide = SLIDE_T; this.emit('slide'); } }
+  // (BUFFERED like the jump: a slide asked for in the air is a fast fall AND a slide on landing, if the landing comes within 0.3 s: it used to be lost, and the gate right after a jump was hit)
+  slideKey() { const p = this.p; if (p.jy > 0) { p.vy = -600; this.slideBuf = 0.3; } else if (p.slide <= 0) { p.slide = SLIDE_T; this.emit('slide'); } }
 
   // a finger went down on / moved onto a control; jump, slide and pause fire once, steering is held
   hold(pid, id, fresh) {
@@ -348,6 +350,7 @@ class Game {
     if (this.state === 'pause') return;
     this.time += dt;
     if (this.riding && !((this.bgTo === 'tram' || this.bgTo === 'gare' || this.bgTo === 'neon' || /^coast(?!Aqua)/.test(this.bgTo)) && this.bgT > 0.25)) this.riding = false;      // (and the coast: its bike lane)          // the vehicles belong to Saint-Gilles and the Neon Quarter: getting out of those zones puts the runner back on foot
+    if (this.hitStop > 0) { this.hitStop -= dt; return; }
     this.updateFx(dt);
     if (this.state === 'play') { if (this.corner) this.cornerStep(dt); else this.step(dt); }
     else if (this.state === 'scene') this.sceneStep(dt);
@@ -491,9 +494,10 @@ class Game {
     this.steer(dt);
     if (this.jumpBuf > 0) { // jump starts on the ground, cancels a slide; a press just before landing is kept briefly
       this.jumpBuf -= dt;
-      if (p.jy === 0) { p.slide = 0; p.vy = JUMP_V * (this.riding && this.vehicle === 'bike' ? 0.92 : 1); p.jy = 0.01; this.jumpBuf = 0; this.emit('jump'); }      // (the e-bike is heavier: a lower jump)
+      if (p.jy === 0) { p.slide = 0; this.slideBuf = 0; p.vy = JUMP_V * (this.riding && this.vehicle === 'bike' ? 0.92 : 1); p.jy = 0.01; this.jumpBuf = 0; this.emit('jump'); }      // (the e-bike is heavier: a lower jump)
     }
-    if (p.jy > 0) { p.vy -= GRAV * dt; p.jy += p.vy * dt; if (p.jy <= 0) { p.jy = 0; p.vy = 0; this.emit('land'); this.landTrick(); } }
+    if (this.slideBuf > 0) this.slideBuf -= dt;
+    if (p.jy > 0) { p.vy -= GRAV * dt; p.jy += p.vy * dt; if (p.jy <= 0) { p.jy = 0; p.vy = 0; this.emit('land'); this.landTrick(); if (this.slideBuf > 0 && this.jumpBuf <= 0) { this.slideBuf = 0; p.slide = SLIDE_T; this.emit('slide'); } } }
     if (this.trick) this.trick.t += dt; if (this.olliePop) { this.olliePop.t += dt; if (this.olliePop.t > 0.5) this.olliePop = null; }
     if (p.slide > 0) p.slide = Math.max(0, p.slide - dt);
     this.dust(dt);
@@ -641,6 +645,7 @@ class Game {
     this.releaseTouch();
     if (this.touch && navigator.vibrate) navigator.vibrate(60);
     if (this.pk) this.pk.onDie();
+    this.hitStop = absorb ? 0 : 0.07;                                                // HIT-STOP: a crash holds the picture for four frames before the fall (the vortex has its own slow pull)
     this.state = 'over'; this.flash = 0.25; this.shake = absorb ? 0.12 : 0.35; this.overT = 0; this.overDelay = absorb ? 0.85 : 0.5; this.jumpBuf = 0;      // (the panel and the restart wait for the vortex to finish absorbing the runner)
     this.emit('crash', absorb ? 'vortex' : undefined); this.onDie();
     const s = this.score();

@@ -2,6 +2,8 @@
 // Chrome / Edge / Samsung Internet (Android, desktop) fire `beforeinstallprompt`: an INSTALL button appears on the title screen and opens the browser's own dialog.
 // Safari (iPhone, iPad) has no such event: there the button explains "Share, then Add to Home Screen". Nothing is shown once the game runs as an installed app.
 (function () {
+  // the loading screen (index.html #boot) goes once the game exists and has drawn its first frames
+  (function bootDone() { const b = document.getElementById('boot'); if (!b) return; if (window.__wf) { setTimeout(() => { b.className = 'done'; setTimeout(() => { if (b.parentNode) b.parentNode.removeChild(b); }, 600); }, 250); } else setTimeout(bootDone, 100); })();
   if (location.protocol === 'file:') return;
   if ('serviceWorker' in navigator) window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
   const standalone = () => matchMedia('(display-mode: fullscreen)').matches || matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
